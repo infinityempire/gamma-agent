@@ -142,7 +142,7 @@ def execute_task_streaming(task):
         'details': f'💾 Writing to empire_report.txt...'
     })
     
-    output_file = '/workspace/project/empire_report.txt'
+    output_file = os.path.join(os.path.dirname(__file__), 'empire_report.txt')
     try:
         with open(output_file, 'w', encoding='utf-8') as f:
             f.write(report_content)
@@ -428,7 +428,7 @@ def status():
 @app.route('/report')
 def get_report():
     """Download the empire_report.txt file"""
-    report_path = '/workspace/project/empire_report.txt'
+    report_path = os.path.join(os.path.dirname(__file__), 'empire_report.txt')
     if os.path.exists(report_path):
         return send_file(report_path, as_attachment=True)
     return jsonify({'error': 'Report not found'}), 404
