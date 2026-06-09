@@ -18,17 +18,22 @@ from flask_cors import CORS
 app = Flask(__name__)
 CORS(app)
 
-# Global event queue for SSE
-event_queue = []
+# Event file for SSE (works with gunicorn workers)
+EVENTS_FILE = os.path.join(os.path.dirname(__file__), '.events')
 
 def emit_event(event_type, data):
-    """Emit an event to all connected SSE clients"""
+    """Emit an event to SSE clients via file"""
     event = json.dumps({
         'type': event_type,
         'timestamp': datetime.now().isoformat(),
         **data
     })
-    event_queue.append(event)
+    with open(EVENTS_FILE, 'a') as f:
+        f.write(json.dumps({
+            'type': event_type,
+            'timestamp': datetime.now().isoformat(),
+            **data
+        }) + '\n')
     print(f"📡 EMIT: {event_type} -> {data}")
 
 def log(msg):
@@ -395,20 +400,25 @@ def events():
         # Send initial connection event
         yield f"data: {json.dumps({'type': 'connected', 'timestamp': datetime.now().isoformat()})}\n\n"
         
-        # Send existing events
-        start_idx = len(event_queue)
-        for event in event_queue[start_idx:]:
-            yield f"data: {event}\n\n"
+        # Read existing events from file
+        if os.path.exists(EVENTS_FILE):
+            with open(EVENTS_FILE, 'r') as f:
+                for line in f:
+                    if line.strip():
+                        yield f"data: {line.strip()}\n\n"
         
-        # Stream new events
-        last_idx = len(event_queue)
+        # Stream new events from file
+        last_pos = os.path.getsize(EVENTS_FILE) if os.path.exists(EVENTS_FILE) else 0
         while True:
             try:
-                while len(event_queue) > last_idx:
-                    event = event_queue[last_idx]
-                    yield f"data: {event}\n\n"
-                    last_idx += 1
-                time.sleep(0.05)
+                if os.path.exists(EVENTS_FILE):
+                    with open(EVENTS_FILE, 'r') as f:
+                        f.seek(last_pos)
+                        for line in f:
+                            if line.strip():
+                                yield f"data: {line.strip()}\n\n"
+                        last_pos = f.tell()
+                time.sleep(0.1)
             except GeneratorExit:
                 break
     

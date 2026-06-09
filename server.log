@@ -1,0 +1,16 @@
+nohup: ignoring input
+
+╔══════════════════════════════════════════════════════════════════════╗
+║                        GAMMA AGENT v2.0                               ║
+║              Full Standalone Server with UI                           ║
+╠══════════════════════════════════════════════════════════════════════╣
+║  🚀 Server: http://localhost:5000                                    ║
+║  📡 SSE:   http://localhost:5000/events                               ║
+║  📝 Task:  POST /execute                                              ║
+║  📄 Report: GET /report                                               ║
+╚══════════════════════════════════════════════════════════════════════╝
+    
+ * Serving Flask app 'gamma_server'
+ * Debug mode: on
+Address already in use
+Port 5000 is in use by another program. Either identify and stop that program, or start the server with a different port.
