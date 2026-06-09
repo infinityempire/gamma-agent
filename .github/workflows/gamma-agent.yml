@@ -186,6 +186,7 @@ log("✅ TASK COMPLETED SUCCESSFULLY!")
 log(f"📄 Report saved to: empire_report.txt")
 log(f"🔗 View at: https://github.com/{repo_owner}/{repo_name}/blob/master/empire_report.txt")
 
-print("::set-output name=status::completed")
-print("::set-output name=report_url::https://github.com/{repo_owner}/{repo_name}/blob/master/empire_report.txt")
+# Output for GitHub Actions (new syntax)
+print(f"status=completed >> $GITHUB_OUTPUT")
+print(f"report_url=https://github.com/{repo_owner}/{repo_name}/blob/master/empire_report.txt >> $GITHUB_OUTPUT")
 PYTHON_SCRIPT
