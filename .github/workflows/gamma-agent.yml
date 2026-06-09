@@ -162,13 +162,13 @@ api_url = f"https://api.github.com/repos/{repo_owner}/{repo_name}/contents/empir
 response = requests.get(api_url, headers=headers)
 sha = response.json().get('sha', '') if response.status_code == 200 else ''
 
-# Update file
+# Update file - encode content properly
+import base64
 data = {
     'message': 'Update empire_report.txt via Gamma Agent',
-    'content': report.encode().decode('utf-8'),
+    'content': base64.b64encode(report.encode('utf-8')).decode('utf-8'),
     'sha': sha if sha else None
 }
-data['content'] = report
 
 response = requests.put(api_url, headers=headers, json=data)
 
@@ -184,8 +184,8 @@ print("::endgroup::")
 # =========================================
 log("✅ TASK COMPLETED SUCCESSFULLY!")
 log(f"📄 Report saved to: empire_report.txt")
-log(f"🔗 View at: https://github.com/{repo_owner}/{repo_name}/blob/main/empire_report.txt")
+log(f"🔗 View at: https://github.com/{repo_owner}/{repo_name}/blob/master/empire_report.txt")
 
 print("::set-output name=status::completed")
-print("::set-output name=report_url::https://github.com/{repo_owner}/{repo_name}/blob/main/empire_report.txt")
+print("::set-output name=report_url::https://github.com/{repo_owner}/{repo_name}/blob/master/empire_report.txt")
 PYTHON_SCRIPT
