@@ -4,14 +4,6 @@ on:
   push:
     branches: [master]
   workflow_dispatch:
-    inputs:
-      task:
-        description: 'Task to execute'
-        required: true
-        default: 'List all active services'
-      github_token:
-        description: 'GitHub Token'
-        required: true
 
 permissions:
   contents: write
@@ -30,8 +22,6 @@ jobs:
       
       - name: Run Gamma Agent
         env:
-          TASK: ${{ github.event.inputs.task }}
-          GH_TOKEN: ${{ github.event.inputs.github_token }}
           REPO_OWNER: ${{ github.repository_owner }}
           REPO_NAME: ${{ github.event.repository.name }}
         run: |
@@ -39,13 +29,11 @@ jobs:
 import os, time, requests
 from datetime import datetime
 
-task = os.environ.get('TASK', 'No task')
-gh_token = os.environ.get('GH_TOKEN', '')
 repo_owner = os.environ.get('REPO_OWNER', '')
 repo_name = os.environ.get('REPO_NAME', '')
 
 print('🚀 GAMMA AGENT v2.0')
-print(f'📋 Task: {task}')
+print(f'Repository: {repo_owner}/{repo_name}')
 print()
 
 services = ['Planning Engine', 'Execution Core', 'Git Integration', 'API Gateway', 'Security Monitor', 'SSE Stream', 'File Manager', 'CORS Handler']
@@ -57,6 +45,7 @@ for s in services:
 ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 report = f'''GAMMA AGENT v2.0 - REPORT
 Generated: {ts}
+Repository: {repo_owner}/{repo_name}
 Services: {len(services)}
 ''' + '\n'.join([f'{i+1}. {s}' for i,s in enumerate(services)])
 
