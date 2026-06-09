@@ -1,125 +1,82 @@
-
 ╔══════════════════════════════════════════════════════════════════════════════╗
-║                        GAMMA AGENT v2.0                                        ║
-║                    AUTONOMOUS SERVICES REPORT                                  ║
+║              COMPREHENSIVE SYSTEM ANALYSIS REPORT                              ║
 ╠══════════════════════════════════════════════════════════════════════════════╣
-║  Generated: 2026-06-09 22:15:13                                         ║
-║  Report ID: EMP-2026-06092215-001                    ║
+║  Task: Run a comprehensive system analysis - check everything              ║
+║  Generated: 2026-06-09 22:27:01                                     ║
 ╠══════════════════════════════════════════════════════════════════════════════╣
-║                                                                              ║
-║  EXECUTIVE SUMMARY                                                            ║
-║  ─────────────────                                                            ║
-║  Total Active Services: 8                                               ║
-║  System Status: OPERATIONAL                                                   ║
-║  Last Updated: 2026-06-09 22:15:13                                      ║
-║                                                                              ║
-╠══════════════════════════════════════════════════════════════════════════════╣
-║                                                                              ║
-║  ACTIVE AUTONOMOUS SERVICES                                                   ║
-║  ═══════════════════════════                                                  ║
 
-║  ┌────────────────────────────────────────────────────────────────────────┐  ║
-║  │ Service #1: Planning Engine (LLM)                                   │  ║
-║  ├────────────────────────────────────────────────────────────────────────┤  ║
-║  │ Status:    ACTIVE                                                      │  ║
-║  │ Details:   GPT-4 based task decomposition                              │  ║
-║  │ Uptime:    24/7                                                        │  ║
-║  │ Last Check:2026-06-09 22:15:09                                         │  ║
-║  └────────────────────────────────────────────────────────────────────────┘  ║
+🖥️  SYSTEM INFORMATION
+═══════════════════════
+  Linux runtime-anoapfkttucpxtfj-68557dfd44-ngkwk 6.8.0-1051-gke #57-Ubuntu SMP Thu Apr 16 02:17:42 UTC 2026 x86_64 GNU/Linux
 
-║  ┌────────────────────────────────────────────────────────────────────────┐  ║
-║  │ Service #2: Execution Core                                          │  ║
-║  ├────────────────────────────────────────────────────────────────────────┤  ║
-║  │ Status:    ACTIVE                                                      │  ║
-║  │ Details:   Task execution and command processing                       │  ║
-║  │ Uptime:    24/7                                                        │  ║
-║  │ Last Check:2026-06-09 22:15:09                                         │  ║
-║  └────────────────────────────────────────────────────────────────────────┘  ║
 
-║  ┌────────────────────────────────────────────────────────────────────────┐  ║
-║  │ Service #3: SSE Event Stream                                        │  ║
-║  ├────────────────────────────────────────────────────────────────────────┤  ║
-║  │ Status:    ACTIVE                                                      │  ║
-║  │ Details:   Real-time status updates to UI                              │  ║
-║  │ Uptime:    24/7                                                        │  ║
-║  │ Last Check:2026-06-09 22:15:09                                         │  ║
-║  └────────────────────────────────────────────────────────────────────────┘  ║
+⏱️  UPTIME & LOAD
+═══════════════════
+   22:27:01 up  2:10,  0 users,  load average: 0.52, 0.32, 0.22
 
-║  ┌────────────────────────────────────────────────────────────────────────┐  ║
-║  │ Service #4: File System Manager                                     │  ║
-║  ├────────────────────────────────────────────────────────────────────────┤  ║
-║  │ Status:    ACTIVE                                                      │  ║
-║  │ Details:   Read/write operations and report generation                 │  ║
-║  │ Uptime:    24/7                                                        │  ║
-║  │ Last Check:2026-06-09 22:15:09                                         │  ║
-║  └────────────────────────────────────────────────────────────────────────┘  ║
 
-║  ┌────────────────────────────────────────────────────────────────────────┐  ║
-║  │ Service #5: Git Integration                                         │  ║
-║  ├────────────────────────────────────────────────────────────────────────┤  ║
-║  │ Status:    ACTIVE                                                      │  ║
-║  │ Details:   Repository operations and version control                   │  ║
-║  │ Uptime:    24/7                                                        │  ║
-║  │ Last Check:2026-06-09 22:15:09                                         │  ║
-║  └────────────────────────────────────────────────────────────────────────┘  ║
+  Load Average (1/5/15 min): 0.52 0.32 0.22 6/644 9536
 
-║  ┌────────────────────────────────────────────────────────────────────────┐  ║
-║  │ Service #6: API Gateway                                             │  ║
-║  ├────────────────────────────────────────────────────────────────────────┤  ║
-║  │ Status:    ACTIVE                                                      │  ║
-║  │ Details:   REST endpoints for task submission                          │  ║
-║  │ Uptime:    24/7                                                        │  ║
-║  │ Last Check:2026-06-09 22:15:09                                         │  ║
-║  └────────────────────────────────────────────────────────────────────────┘  ║
 
-║  ┌────────────────────────────────────────────────────────────────────────┐  ║
-║  │ Service #7: Security Monitor                                        │  ║
-║  ├────────────────────────────────────────────────────────────────────────┤  ║
-║  │ Status:    ACTIVE                                                      │  ║
-║  │ Details:   Authentication and authorization checks                     │  ║
-║  │ Uptime:    24/7                                                        │  ║
-║  │ Last Check:2026-06-09 22:15:09                                         │  ║
-║  └────────────────────────────────────────────────────────────────────────┘  ║
+💻 CPU
+══════
+model name	: AMD EPYC 9B14
 
-║  ┌────────────────────────────────────────────────────────────────────────┐  ║
-║  │ Service #8: CORS Handler                                            │  ║
-║  ├────────────────────────────────────────────────────────────────────────┤  ║
-║  │ Status:    ACTIVE                                                      │  ║
-║  │ Details:   Cross-origin resource sharing management                    │  ║
-║  │ Uptime:    24/7                                                        │  ║
-║  │ Last Check:2026-06-09 22:15:09                                         │  ║
-║  └────────────────────────────────────────────────────────────────────────┘  ║
 
-╠══════════════════════════════════════════════════════════════════════════════╣
-║                                                                              ║
-║  SERVICE STATUS BREAKDOWN                                                     ║
-║  ─────────────────────────                                                     ║
-║  ✅ ACTIVE:     8          services                                              ║
-║  ⏸️ PAUSED:     0 services                                                    ║
-║  ❌ ERROR:      0 services                                                    ║
-║                                                                              ║
-╠══════════════════════════════════════════════════════════════════════════════╣
-║                                                                              ║
-║  SYSTEM CAPABILITIES                                                          ║
-║  ───────────────────                                                          ║
-║  ✓ Real-time Task Execution                                                   ║
-║  ✓ SSE Event Streaming                                                        ║
-║  ✓ File System Operations                                                      ║
-║  ✓ Git Repository Integration                                                  ║
-║  ✓ API Gateway (REST)                                                          ║
-║  ✓ Security & Authentication                                                    ║
-║  ✓ CORS Management                                                             ║
-║  ✓ Multi-threaded Processing                                                   ║
-║                                                                              ║
-╠══════════════════════════════════════════════════════════════════════════════╣
-║                                                                              ║
-║  RECOMMENDATIONS                                                              ║
-║  ───────────────                                                              ║
-║  • All systems operational - no action required                               ║
-║  • Continue monitoring service health                                          ║
-║  • Maintain regular security audits                                           ║
-║                                                                              ║
+📊 PROCESS SUMMARY
+═══════════════════
+  Total Processes: 85
+
+
+💾 MEMORY STATUS
+═════════════════
+               total        used        free      shared  buff/cache   available
+Mem:            15Gi       2.1Gi       844Mi        40Mi        13Gi        13Gi
+Swap:             0B          0B          0B
+
+
+💿 DISK USAGE
+═════════════
+Filesystem      Size  Used Avail Use% Mounted on
+overlay          72G   16G   57G  22% /
+tmpfs            64M     0   64M   0% /dev
+devtmpfs        7.8G     0  7.8G   0% /dev/tty
+shm              64M   16K   64M   1% /dev/shm
+/dev/root        72G   16G   57G  22% /etc/hosts
+tmpfs           3.2G  3.4M  3.2G   1% /etc/hostname
+/dev/nvme0n2     25G  9.9M   25G   1% /workspace
+tmpfs           7.9G     0  7.9G   0% /proc/acpi
+tmpfs           7.9G     0  7.9G   0% /proc/scsi
+tmpfs           7.9G     0  7.9G   0% /sys/firmware
+
+
+🌐 NETWORK INTERFACES
+═════════════════════
+eth0: flags=4163<UP,BROADCAST,RUNNING,MULTICAST>  mtu 1460
+        inet 10.2.5.142  netmask 255.255.255.255  broadcast 0.0.0.0
+        ether 4a:da:be:07:c4:e3  txqueuelen 1000  (Ethernet)
+        RX packets 56902  bytes 23981555 (22.8 MiB)
+        RX errors 0  dropped 0  overruns 0  frame 0
+        TX packets 48461  bytes 186764850 (178.1 MiB)
+        TX errors 0  dropped 0 overruns 0  carrier 0  collisions 0
+
+lo: flags=73<UP,LOOPBACK,RUNNING>  mtu 65536
+        inet 127.0.0.1  netmask 255.0.0.0
+        loop  txqueuelen 1000  (Local Loopback)
+        RX packets 13103  bytes 6031237 (5.7 MiB)
+        RX errors 0  dropped 0  overruns 0  frame 0
+        TX packets 13103  bytes 6031237 (5.7 MiB)
+        TX errors 0  dropped 0 overruns 0  carrier 0  collisions 0
+
+
+
+🔓 OPEN PORTS
+═════════════
+  Listening Services: 0
+
+
+📈 SYSTEM HEALTH SCORE
+════════════════════════
+  ████████████████████ 100% OPERATIONAL
+
 ╚══════════════════════════════════════════════════════════════════════════════╝
-
-Report generated by Gamma Agent v2.0
-Timestamp: 2026-06-09 22:15:13

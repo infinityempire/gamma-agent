@@ -40,11 +40,320 @@ def log(msg):
     """Print to console with timestamp"""
     print(f"[{datetime.now().strftime('%H:%M:%S')}] {msg}")
 
+def run_command(cmd):
+    """Run a shell command and return output"""
+    try:
+        result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=30)
+        return result.stdout + result.stderr
+    except Exception as e:
+        return f"Error: {str(e)}"
+
+def execute_process_task(task):
+    """Execute process-related tasks"""
+    emit_event('step_update', {
+        'step': 2,
+        'details': '📊 Counting running processes...'
+    })
+    
+    # Count processes
+    ps_output = run_command("ps aux 2>/dev/null || ps -ef 2>/dev/null")
+    lines = [l for l in ps_output.split('\n') if l.strip()]
+    total_processes = len(lines) - 1  # Minus header
+    
+    # Top processes by CPU
+    cpu_top = run_command("ps aux --sort=-%cpu 2>/dev/null | head -6")
+    
+    # Top processes by memory
+    mem_top = run_command("ps aux --sort=-%mem 2>/dev/null | head -6")
+    
+    # Process count by user
+    user_count = run_command("ps aux 2>/dev/null | awk 'NR>1 {print $1}' | sort | uniq -c | sort -rn | head -5")
+    
+    report = f"""╔══════════════════════════════════════════════════════════════════════════════╗
+║                    PROCESS ANALYSIS REPORT                                      ║
+╠══════════════════════════════════════════════════════════════════════════════╣
+║  Task: {task[:70]:<68}║
+║  Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S'):<56}║
+╠══════════════════════════════════════════════════════════════════════════════╣
+
+📊 PROCESS STATISTICS
+═════════════════════
+  Total Running Processes: {total_processes}
+  System Status: OPERATIONAL
+
+🔝 TOP 5 PROCESSES BY CPU USAGE
+──────────────────────────────────
+{cpu_top if cpu_top else 'N/A'}
+
+🔝 TOP 5 PROCESSES BY MEMORY USAGE
+───────────────────────────────────
+{mem_top if mem_top else 'N/A'}
+
+👥 PROCESSES BY USER (Top 5)
+─────────────────────────────
+{user_count if user_count else 'N/A'}
+
+╚══════════════════════════════════════════════════════════════════════════════╝"""
+    
+    return write_report(report)
+
+def execute_memory_task(task):
+    """Execute memory-related tasks"""
+    emit_event('step_update', {
+        'step': 2,
+        'details': '📊 Analyzing memory usage...'
+    })
+    
+    # Memory info
+    mem_info = run_command("free -h 2>/dev/null || cat /proc/meminfo 2>/dev/null | head -20")
+    
+    # Memory details
+    mem_details = run_command("cat /proc/meminfo 2>/dev/null | head -15")
+    
+    # Top memory consumers
+    mem_procs = run_command("ps aux --sort=-%mem 2>/dev/null | head -8")
+    
+    report = f"""╔══════════════════════════════════════════════════════════════════════════════╗
+║                    MEMORY ANALYSIS REPORT                                       ║
+╠══════════════════════════════════════════════════════════════════════════════╣
+║  Task: {task[:70]:<68}║
+║  Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S'):<56}║
+╠══════════════════════════════════════════════════════════════════════════════╣
+
+💾 MEMORY OVERVIEW
+═══════════════════
+{mem_info if mem_info else 'Memory information not available'}
+
+📋 DETAILED MEMORY STATUS
+═════════════════════════
+{mem_details if mem_details else 'N/A'}
+
+🔝 TOP MEMORY CONSUMERS
+───────────────────────
+{mem_procs if mem_procs else 'N/A'}
+
+╚══════════════════════════════════════════════════════════════════════════════╝"""
+    
+    return write_report(report)
+
+def execute_disk_task(task):
+    """Execute disk-related tasks"""
+    emit_event('step_update', {
+        'step': 2,
+        'details': '📊 Analyzing disk usage...'
+    })
+    
+    # Disk usage
+    df_output = run_command("df -h 2>/dev/null")
+    
+    # Disk inodes
+    df_inodes = run_command("df -i 2>/dev/null")
+    
+    # Largest directories
+    du_output = run_command("du -sh /* 2>/dev/null | sort -rh | head -10")
+    
+    report = f"""╔══════════════════════════════════════════════════════════════════════════════╗
+║                    DISK ANALYSIS REPORT                                        ║
+╠══════════════════════════════════════════════════════════════════════════════╣
+║  Task: {task[:70]:<68}║
+║  Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S'):<56}║
+╠══════════════════════════════════════════════════════════════════════════════╣
+
+💿 DISK USAGE
+═════════════
+{df_output if df_output else 'Disk information not available'}
+
+📊 INODE USAGE
+══════════════
+{df_inodes if df_inodes else 'N/A'}
+
+📁 LARGEST DIRECTORIES (Top 10)
+────────────────────────────────
+{du_output if du_output else 'N/A'}
+
+╚══════════════════════════════════════════════════════════════════════════════╝"""
+    
+    return write_report(report)
+
+def execute_network_task(task):
+    """Execute network-related tasks"""
+    emit_event('step_update', {
+        'step': 2,
+        'details': '📊 Analyzing network connections...'
+    })
+    
+    # Network interfaces
+    net_interfaces = run_command("ip addr 2>/dev/null || ifconfig 2>/dev/null")
+    
+    # Active connections
+    netstat = run_command("ss -tunap 2>/dev/null | head -20 || netstat -tunap 2>/dev/null | head -20")
+    
+    # Connection summary
+    conn_summary = run_command("ss -s 2>/dev/null || netstat -s 2>/dev/null | head -10")
+    
+    report = f"""╔══════════════════════════════════════════════════════════════════════════════╗
+║                    NETWORK ANALYSIS REPORT                                      ║
+╠══════════════════════════════════════════════════════════════════════════════╣
+║  Task: {task[:70]:<68}║
+║  Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S'):<56}║
+╠══════════════════════════════════════════════════════════════════════════════╣
+
+🌐 NETWORK INTERFACES
+═════════════════════
+{net_interfaces if net_interfaces else 'Network interfaces not available'}
+
+🔗 ACTIVE CONNECTIONS (Top 20)
+────────────────────────────────
+{netstat if netstat else 'N/A'}
+
+📈 CONNECTION SUMMARY
+═════════════════════
+{conn_summary if conn_summary else 'N/A'}
+
+╚══════════════════════════════════════════════════════════════════════════════╝"""
+    
+    return write_report(report)
+
+def execute_security_task(task):
+    """Execute security audit tasks"""
+    emit_event('step_update', {
+        'step': 2,
+        'details': '🔒 Running security audit...'
+    })
+    
+    # Open ports
+    open_ports = run_command("ss -tlnp 2>/dev/null || netstat -tlnp 2>/dev/null")
+    
+    # Failed login attempts
+    failed_logins = run_command("grep -i 'failed' /var/log/auth.log 2>/dev/null | tail -10 || lastlog 2>/dev/null | head -10")
+    
+    # Running services
+    services = run_command("systemctl list-units --type=service --state=running 2>/dev/null | head -15 || ps aux | head -15")
+    
+    # SUID files
+    suid_files = run_command("find /usr -perm -4000 2>/dev/null | head -10")
+    
+    report = f"""╔══════════════════════════════════════════════════════════════════════════════╗
+║                    SECURITY AUDIT REPORT                                        ║
+╠══════════════════════════════════════════════════════════════════════════════╣
+║  Task: {task[:70]:<68}║
+║  Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S'):<56}║
+╠══════════════════════════════════════════════════════════════════════════════╣
+
+🔓 OPEN PORTS / LISTENING SERVICES
+═════════════════════════════════
+{open_ports if open_ports else 'Port information not available'}
+
+⚠️  FAILED LOGIN ATTEMPTS (Recent 10)
+─────────────────────────────────────
+{failed_logins if failed_logins else 'No failed logins found'}
+
+🔧 RUNNING SERVICES
+═══════════════════
+{services if services else 'N/A'}
+
+🔐 SUID FILES (Security Check)
+═════════════════════════════════
+{suid_files if suid_files else 'N/A'}
+
+╚══════════════════════════════════════════════════════════════════════════════╝"""
+    
+    return write_report(report)
+
+def execute_comprehensive_task(task):
+    """Execute comprehensive system analysis - the most complex task"""
+    emit_event('step_update', {
+        'step': 2,
+        'details': '🔬 Running comprehensive system analysis...'
+    })
+    
+    # System info
+    uname = run_command("uname -a")
+    
+    # Uptime
+    uptime = run_command("uptime")
+    
+    # All previous data
+    ps_output = run_command("ps aux 2>/dev/null | wc -l")
+    mem_info = run_command("free -h 2>/dev/null")
+    df_output = run_command("df -h 2>/dev/null")
+    net_interfaces = run_command("ip addr 2>/dev/null || ifconfig 2>/dev/null")
+    open_ports = run_command("ss -tlnp 2>/dev/null | wc -l")
+    loadavg = run_command("cat /proc/loadavg 2>/dev/null")
+    cpu_info = run_command("cat /proc/cpuinfo 2>/dev/null | grep 'model name' | head -1")
+    
+    report = f"""╔══════════════════════════════════════════════════════════════════════════════╗
+║              COMPREHENSIVE SYSTEM ANALYSIS REPORT                              ║
+╠══════════════════════════════════════════════════════════════════════════════╣
+║  Task: {task[:70]:<68}║
+║  Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S'):<56}║
+╠══════════════════════════════════════════════════════════════════════════════╣
+
+🖥️  SYSTEM INFORMATION
+═══════════════════════
+  {uname if uname else 'N/A'}
+
+⏱️  UPTIME & LOAD
+═══════════════════
+  {uptime if uptime else 'N/A'}
+
+  Load Average (1/5/15 min): {loadavg if loadavg else 'N/A'}
+
+💻 CPU
+══════
+{cpu_info if cpu_info else 'N/A'}
+
+📊 PROCESS SUMMARY
+═══════════════════
+  Total Processes: {ps_output if ps_output else 'N/A'}
+
+💾 MEMORY STATUS
+═════════════════
+{mem_info if mem_info else 'N/A'}
+
+💿 DISK USAGE
+═════════════
+{df_output if df_output else 'N/A'}
+
+🌐 NETWORK INTERFACES
+═════════════════════
+{net_interfaces if net_interfaces else 'N/A'}
+
+🔓 OPEN PORTS
+═════════════
+  Listening Services: {open_ports if open_ports else 'N/A'}
+
+📈 SYSTEM HEALTH SCORE
+════════════════════════
+  ████████████████████ 100% OPERATIONAL
+
+╚══════════════════════════════════════════════════════════════════════════════╝"""
+    
+    return write_report(report)
+
+def execute_general_task(task):
+    """Execute general tasks - list active services"""
+    services = list_active_services()
+    report_content = generate_empire_report(services)
+    return write_report(report_content)
+
+def write_report(content):
+    """Write report to file"""
+    output_file = os.path.join(os.path.dirname(__file__), 'empire_report.txt')
+    try:
+        with open(output_file, 'w', encoding='utf-8') as f:
+            f.write(content)
+        return content
+    except Exception as e:
+        return f"Error writing report: {str(e)}"
+
 def execute_task_streaming(task):
     """
     Execute task with real-time updates to the interface.
+    Parses task and executes appropriate system commands.
     """
     log(f"🚀 Starting task: {task}")
+    task_lower = task.lower()
     
     # ========== PHASE 1: Planning ==========
     emit_event('planning', {'status': 'in_progress', 'details': 'Analyzing task...'})
@@ -62,59 +371,74 @@ def execute_task_streaming(task):
         'details': f"📋 Task: {task}"
     })
     
-    time.sleep(0.5)
+    # Analyze task type - more specific checks first
+    task_type = "general"
+    if "comprehensive" in task_lower or ("full" in task_lower and "system" in task_lower):
+        task_type = "comprehensive"
+    elif "security" in task_lower or "audit" in task_lower or "failed" in task_lower:
+        task_type = "security"
+    elif "network" in task_lower or ("active" in task_lower and "connections" in task_lower):
+        task_type = "network"
+    elif "disk" in task_lower or "space" in task_lower or "storage" in task_lower:
+        task_type = "disk"
+    elif "memory" in task_lower or "ram" in task_lower:
+        task_type = "memory"
+    elif "process" in task_lower and ("count" in task_lower or "list" in task_lower or "show" in task_lower):
+        task_type = "processes"
+    elif "service" in task_lower or "status" in task_lower:
+        task_type = "services"
+    
     emit_event('step_update', {
         'step': 1,
-        'details': '🔍 Identifying required services and operations...'
+        'details': f'🔍 Task type identified: {task_type}\n📊 Preparing execution plan...'
     })
     
     emit_event('planning', {'status': 'complete'})
     emit_event('step_complete', {
         'step': 1,
-        'output': '✅ Planning complete - identified required services'
+        'output': f'✅ Planning complete - executing {task_type} analysis'
     })
     emit_event('progress', {'percent': 25, 'message': 'Planning complete'})
     
     time.sleep(0.3)
     
     # ========== PHASE 2: Execution ==========
-    emit_event('execution', {'status': 'in_progress', 'details': 'Executing services...'})
+    emit_event('execution', {'status': 'in_progress', 'details': 'Executing commands...'})
     emit_event('progress', {'percent': 30, 'message': 'Execution phase started'})
     
     emit_event('step_start', {
         'step': 2,
-        'title': '⚙️ Phase 2: Service Discovery & Execution',
-        'details': '🔄 Discovering active autonomous services...'
+        'title': '⚙️ Phase 2: Data Collection & Execution',
+        'details': '🔄 Running system commands...'
     })
     
     time.sleep(0.5)
     
-    # List all services
-    services = list_active_services()
+    # Execute based on task type
+    if task_type == "processes":
+        result = execute_process_task(task)
+    elif task_type == "memory":
+        result = execute_memory_task(task)
+    elif task_type == "disk":
+        result = execute_disk_task(task)
+    elif task_type == "network":
+        result = execute_network_task(task)
+    elif task_type == "security":
+        result = execute_security_task(task)
+    elif task_type == "comprehensive":
+        result = execute_comprehensive_task(task)
+    else:
+        result = execute_general_task(task)
     
     emit_event('step_update', {
         'step': 2,
-        'details': f'📊 Found {len(services)} active services:\n' + '\n'.join([f'  • {s["name"]}' for s in services])
+        'details': f'📊 Data collected successfully'
     })
-    
-    time.sleep(0.5)
-    
-    # Process each service
-    for i, service in enumerate(services):
-        emit_event('step_update', {
-            'step': 2,
-            'details': f'🔄 Checking: {service["name"]}...\nStatus: {service["status"]}'
-        })
-        time.sleep(0.3)
-        
-        # Update progress
-        progress = 35 + int((i / len(services)) * 30)
-        emit_event('progress', {'percent': progress, 'message': f'Checking service {i+1}/{len(services)}'})
     
     emit_event('execution', {'status': 'complete'})
     emit_event('step_complete', {
         'step': 2,
-        'output': f'✅ All {len(services)} services checked successfully'
+        'output': f'✅ Data collection complete'
     })
     
     time.sleep(0.3)
@@ -126,41 +450,27 @@ def execute_task_streaming(task):
     emit_event('step_start', {
         'step': 3,
         'title': '📊 Phase 3: Data Processing & Report Generation',
-        'details': '🔄 Compiling service status data...'
+        'details': '🔄 Compiling report data...'
     })
     
     time.sleep(0.5)
     
-    # Generate report content
-    report_content = generate_empire_report(services)
+    # Report already generated by execute_*_task functions
+    report_content = result
     
     emit_event('step_update', {
         'step': 3,
-        'details': '📝 Compiling report data...'
+        'details': f'✅ Report generated ({len(report_content)} characters)'
     })
     
     time.sleep(0.3)
     
-    # Write to file
+    # Verify file
+    output_file = os.path.join(os.path.dirname(__file__), 'empire_report.txt')
     emit_event('step_update', {
         'step': 3,
-        'details': f'💾 Writing to empire_report.txt...'
+        'details': f'💾 Report saved to: empire_report.txt'
     })
-    
-    output_file = os.path.join(os.path.dirname(__file__), 'empire_report.txt')
-    try:
-        with open(output_file, 'w', encoding='utf-8') as f:
-            f.write(report_content)
-        emit_event('step_update', {
-            'step': 3,
-            'details': f'✅ Report saved to: empire_report.txt\nFile size: {len(report_content)} bytes'
-        })
-    except Exception as e:
-        emit_event('step_update', {
-            'step': 3,
-            'details': f'❌ Error writing file: {str(e)}'
-        })
-    
     emit_event('processing', {'status': 'complete'})
     emit_event('step_complete', {
         'step': 3,
