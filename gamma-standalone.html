@@ -1,0 +1,848 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gamma Agent v2.0 - Standalone Interface</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #0f0c29 0%, #302b63 50%, #24243e 100%);
+            min-height: 100vh;
+            color: #fff;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        header {
+            text-align: center;
+            padding: 30px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 20px;
+            margin-bottom: 30px;
+            border: 2px solid #00d4ff;
+            box-shadow: 0 0 30px rgba(0, 212, 255, 0.3);
+        }
+        
+        h1 {
+            font-size: 3em;
+            background: linear-gradient(135deg, #00d4ff, #00ff88);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            text-shadow: none;
+            margin-bottom: 10px;
+        }
+        
+        .subtitle {
+            color: #94a3b8;
+            font-size: 1.2em;
+        }
+        
+        .main-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+        }
+        
+        .panel {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 20px;
+            padding: 25px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .panel-title {
+            font-size: 1.5em;
+            color: #00d4ff;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .input-area {
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 15px;
+            padding: 20px;
+        }
+        
+        textarea {
+            width: 100%;
+            min-height: 150px;
+            background: rgba(0, 0, 0, 0.5);
+            border: 2px solid #00d4ff;
+            border-radius: 10px;
+            padding: 15px;
+            color: #fff;
+            font-size: 16px;
+            resize: vertical;
+            font-family: 'Courier New', monospace;
+        }
+        
+        textarea:focus {
+            outline: none;
+            box-shadow: 0 0 20px rgba(0, 212, 255, 0.5);
+        }
+        
+        .btn {
+            background: linear-gradient(135deg, #00d4ff, #00ff88);
+            color: #0f0c29;
+            border: none;
+            padding: 15px 40px;
+            font-size: 18px;
+            font-weight: bold;
+            border-radius: 30px;
+            cursor: pointer;
+            margin-top: 15px;
+            transition: all 0.3s;
+            width: 100%;
+        }
+        
+        .btn:hover {
+            transform: scale(1.05);
+            box-shadow: 0 0 30px rgba(0, 212, 255, 0.6);
+        }
+        
+        .btn:disabled {
+            background: #555;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .progress-section {
+            margin-top: 20px;
+        }
+        
+        .progress-bar {
+            width: 100%;
+            height: 8px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 4px;
+            overflow: hidden;
+        }
+        
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #00d4ff, #00ff88, #00d4ff);
+            background-size: 200% 100%;
+            animation: shimmer 2s linear infinite;
+            transition: width 0.5s ease;
+        }
+        
+        @keyframes shimmer {
+            0% { background-position: 200% 0; }
+            100% { background-position: -200% 0; }
+        }
+        
+        .progress-text {
+            text-align: center;
+            margin-top: 10px;
+            color: #00d4ff;
+            font-weight: bold;
+        }
+        
+        /* Real-time Steps Display */
+        .steps-display {
+            max-height: 600px;
+            overflow-y: auto;
+            background: rgba(0, 0, 0, 0.4);
+            border-radius: 15px;
+            padding: 20px;
+        }
+        
+        .step-item {
+            display: flex;
+            align-items: flex-start;
+            padding: 15px;
+            margin-bottom: 10px;
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 10px;
+            border-right: 5px solid #555;
+            transition: all 0.3s;
+            animation: slideIn 0.3s ease;
+        }
+        
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateX(-20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+        
+        .step-item.active {
+            border-right-color: #00d4ff;
+            background: rgba(0, 212, 255, 0.1);
+            box-shadow: 0 0 15px rgba(0, 212, 255, 0.2);
+        }
+        
+        .step-item.done {
+            border-right-color: #00ff88;
+        }
+        
+        .step-item.error {
+            border-right-color: #ff4444;
+        }
+        
+        .step-icon {
+            font-size: 2em;
+            margin-right: 15px;
+            min-width: 50px;
+            text-align: center;
+        }
+        
+        .step-content {
+            flex: 1;
+        }
+        
+        .step-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        
+        .step-title {
+            font-weight: bold;
+            font-size: 1.1em;
+            color: #fff;
+        }
+        
+        .step-time {
+            color: #666;
+            font-size: 0.85em;
+        }
+        
+        .step-details {
+            color: #b0b0b0;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+            background: rgba(0, 0, 0, 0.4);
+            padding: 12px;
+            border-radius: 8px;
+            direction: ltr;
+            text-align: left;
+            white-space: pre-wrap;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        
+        .step-status-badge {
+            display: inline-block;
+            padding: 3px 10px;
+            border-radius: 15px;
+            font-size: 0.8em;
+            margin-right: 10px;
+        }
+        
+        .badge-pending {
+            background: rgba(255, 255, 255, 0.1);
+            color: #888;
+        }
+        
+        .badge-running {
+            background: rgba(0, 212, 255, 0.3);
+            color: #00d4ff;
+        }
+        
+        .badge-done {
+            background: rgba(0, 255, 136, 0.3);
+            color: #00ff88;
+        }
+        
+        .badge-error {
+            background: rgba(255, 68, 68, 0.3);
+            color: #ff4444;
+        }
+        
+        /* Status Cards */
+        .status-cards {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        
+        .status-card {
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 15px;
+            padding: 20px;
+            text-align: center;
+            border: 2px solid transparent;
+            transition: all 0.3s;
+        }
+        
+        .status-card.active {
+            border-color: #00d4ff;
+            box-shadow: 0 0 20px rgba(0, 212, 255, 0.3);
+        }
+        
+        .status-card.done {
+            border-color: #00ff88;
+            background: rgba(0, 255, 136, 0.1);
+        }
+        
+        .status-card.error {
+            border-color: #ff4444;
+            background: rgba(255, 68, 68, 0.1);
+        }
+        
+        .card-icon {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+        
+        .card-title {
+            font-size: 1.1em;
+            color: #fff;
+            margin-bottom: 5px;
+        }
+        
+        .card-status {
+            font-size: 0.9em;
+            color: #888;
+        }
+        
+        /* Output Section */
+        .output-section {
+            margin-top: 30px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 20px;
+            padding: 25px;
+            border: 2px solid #00ff88;
+        }
+        
+        .output-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+        
+        .output-title {
+            font-size: 1.5em;
+            color: #00ff88;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .file-badge {
+            background: rgba(0, 255, 136, 0.2);
+            color: #00ff88;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 0.9em;
+        }
+        
+        #final-output {
+            background: rgba(0, 0, 0, 0.5);
+            border-radius: 15px;
+            padding: 20px;
+            font-family: 'Courier New', monospace;
+            color: #00ff88;
+            direction: ltr;
+            text-align: left;
+            white-space: pre-wrap;
+            font-size: 0.95em;
+            max-height: 500px;
+            overflow-y: auto;
+            border: 1px solid rgba(0, 255, 136, 0.3);
+        }
+        
+        /* Connection Status */
+        .connection-status {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 10px 20px;
+            border-radius: 25px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 14px;
+            z-index: 1000;
+        }
+        
+        .connection-status.connected {
+            background: rgba(0, 255, 136, 0.2);
+            color: #00ff88;
+        }
+        
+        .connection-status.disconnected {
+            background: rgba(255, 68, 68, 0.2);
+            color: #ff4444;
+        }
+        
+        .pulse {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            animation: pulse 1.5s infinite;
+        }
+        
+        .pulse.green {
+            background: #00ff88;
+        }
+        
+        .pulse.red {
+            background: #ff4444;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.2); opacity: 0.7; }
+        }
+        
+        /* Scrollbar */
+        ::-webkit-scrollbar {
+            width: 10px;
+        }
+        
+        ::-webkit-scrollbar-track {
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 5px;
+        }
+        
+        ::-webkit-scrollbar-thumb {
+            background: linear-gradient(135deg, #00d4ff, #00ff88);
+            border-radius: 5px;
+        }
+        
+        /* Empty State */
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #666;
+        }
+        
+        .empty-state-icon {
+            font-size: 4em;
+            margin-bottom: 20px;
+            opacity: 0.5;
+        }
+        
+        .empty-state-text {
+            font-size: 1.2em;
+        }
+        
+        /* Full width for main content */
+        .full-width {
+            grid-column: 1 / -1;
+        }
+    </style>
+</head>
+<body>
+    <div class="connection-status connected" id="connection-status">
+        <span class="pulse green"></span>
+        <span>Connected to Server</span>
+    </div>
+    
+    <div class="container">
+        <header>
+            <h1>🚀 GAMMA AGENT v2.0</h1>
+            <p class="subtitle">Real-Time Autonomous Task Execution System</p>
+        </header>
+        
+        <div class="main-grid">
+            <!-- Left Panel: Input -->
+            <div class="panel">
+                <div class="panel-title">
+                    📝 Task Input
+                </div>
+                <div class="input-area">
+                    <textarea id="task-input" placeholder="Enter your task here...&#10;&#10;Example:&#10;Gamma, list all your active autonomous services, and output the current status of each one to empire_report.txt."></textarea>
+                    <button class="btn" id="execute-btn" onclick="executeTask()">
+                        ▶ Execute Task
+                    </button>
+                    
+                    <div class="progress-section">
+                        <div class="progress-bar">
+                            <div class="progress-fill" id="progress-fill" style="width: 0%"></div>
+                        </div>
+                        <div class="progress-text" id="progress-text">Ready to execute</div>
+                    </div>
+                </div>
+                
+                <!-- Status Cards -->
+                <div class="status-cards" style="margin-top: 25px;">
+                    <div class="status-card" id="card-planning">
+                        <div class="card-icon">🧠</div>
+                        <div class="card-title">Planning</div>
+                        <div class="card-status" id="card-planning-status">Pending</div>
+                    </div>
+                    <div class="status-card" id="card-execution">
+                        <div class="card-icon">⚙️</div>
+                        <div class="card-title">Execution</div>
+                        <div class="card-status" id="card-execution-status">Pending</div>
+                    </div>
+                    <div class="status-card" id="card-processing">
+                        <div class="card-icon">📊</div>
+                        <div class="card-title">Processing</div>
+                        <div class="card-status" id="card-processing-status">Pending</div>
+                    </div>
+                    <div class="status-card" id="card-output">
+                        <div class="card-icon">📤</div>
+                        <div class="card-title">Output</div>
+                        <div class="card-status" id="card-output-status">Pending</div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Right Panel: Steps -->
+            <div class="panel">
+                <div class="panel-title">
+                    📋 Real-Time Execution Steps
+                </div>
+                <div class="steps-display" id="steps-display">
+                    <div class="empty-state">
+                        <div class="empty-state-icon">⏳</div>
+                        <div class="empty-state-text">Steps will appear here in real-time</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Output Section (Full Width) -->
+        <div class="output-section" id="output-section" style="display: none;">
+            <div class="output-header">
+                <div class="output-title">
+                    📤 Final Output
+                </div>
+                <span class="file-badge" id="file-badge">empire_report.txt</span>
+            </div>
+            <div id="final-output"></div>
+        </div>
+    </div>
+    
+    <script>
+        // ==========================================
+        // GAMMA AGENT - REAL-TIME EXECUTION CLIENT
+        // ==========================================
+        
+        let eventSource = null;
+        let isExecuting = false;
+        
+        // Initialize connection on load
+        window.addEventListener('load', () => {
+            connectSSE();
+        });
+        
+        function connectSSE() {
+            if (eventSource) {
+                eventSource.close();
+            }
+            
+            updateConnectionStatus('connected');
+            
+            eventSource = new EventSource('/events');
+            
+            eventSource.onopen = () => {
+                updateConnectionStatus('connected');
+                console.log('✅ Connected to server');
+            };
+            
+            eventSource.onerror = () => {
+                updateConnectionStatus('disconnected');
+                console.log('❌ Connection lost, retrying...');
+                setTimeout(connectSSE, 3000);
+            };
+            
+            eventSource.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    handleEvent(data);
+                } catch (e) {
+                    // Ignore non-JSON messages
+                }
+            };
+        }
+        
+        function updateConnectionStatus(status) {
+            const el = document.getElementById('connection-status');
+            if (status === 'connected') {
+                el.className = 'connection-status connected';
+                el.innerHTML = '<span class="pulse green"></span><span>Connected to Server</span>';
+            } else {
+                el.className = 'connection-status disconnected';
+                el.innerHTML = '<span class="pulse red"></span><span>Disconnected</span>';
+            }
+        }
+        
+        function handleEvent(data) {
+            console.log('📡 Event:', data.type, data);
+            
+            switch(data.type) {
+                case 'connected':
+                    console.log('✅ Server connected');
+                    break;
+                    
+                case 'step_start':
+                    addStep(data.step, data.title, data.details);
+                    break;
+                    
+                case 'step_update':
+                    updateStep(data.step, data.details);
+                    break;
+                    
+                case 'step_complete':
+                    completeStep(data.step, data.output);
+                    break;
+                    
+                case 'step_error':
+                    errorStep(data.step, data.error);
+                    break;
+                    
+                case 'planning':
+                    updateCard('planning', data.status, data.details);
+                    break;
+                    
+                case 'execution':
+                    updateCard('execution', data.status, data.details);
+                    break;
+                    
+                case 'processing':
+                    updateCard('processing', data.status, data.details);
+                    break;
+                    
+                case 'output':
+                    updateCard('output', data.status, data.details);
+                    break;
+                    
+                case 'progress':
+                    updateProgress(data.percent, data.message);
+                    break;
+                    
+                case 'final_output':
+                    showFinalOutput(data.output, data.file);
+                    break;
+            }
+        }
+        
+        function addStep(step, title, details) {
+            const container = document.getElementById('steps-display');
+            
+            // Remove empty state if present
+            const emptyState = container.querySelector('.empty-state');
+            if (emptyState) {
+                emptyState.remove();
+            }
+            
+            const stepId = `step-${step}`;
+            const existingStep = document.getElementById(stepId);
+            if (existingStep) {
+                existingStep.remove();
+            }
+            
+            const stepEl = document.createElement('div');
+            stepEl.className = 'step-item active';
+            stepEl.id = stepId;
+            
+            const icon = getStepIcon(step);
+            const time = new Date().toLocaleTimeString();
+            
+            stepEl.innerHTML = `
+                <div class="step-icon">${icon}</div>
+                <div class="step-content">
+                    <div class="step-header">
+                        <span class="step-title">${title}</span>
+                        <span class="step-status-badge badge-running">Running...</span>
+                    </div>
+                    <div class="step-details" id="step-details-${step}">${details || 'Processing...'}</div>
+                    <div class="step-time">⏰ ${time}</div>
+                </div>
+            `;
+            
+            // Insert at top
+            container.insertBefore(stepEl, container.firstChild);
+            
+            // Scroll to top
+            container.scrollTop = 0;
+        }
+        
+        function updateStep(step, details) {
+            const detailsEl = document.getElementById(`step-details-${step}`);
+            if (detailsEl) {
+                detailsEl.textContent = details;
+                // Scroll to show latest
+                detailsEl.parentElement.parentElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+        }
+        
+        function completeStep(step, output) {
+            const stepEl = document.getElementById(`step-${step}`);
+            if (stepEl) {
+                stepEl.classList.remove('active');
+                stepEl.classList.add('done');
+                stepEl.querySelector('.step-icon').textContent = '✅';
+                stepEl.querySelector('.step-status-badge').className = 'step-status-badge badge-done';
+                stepEl.querySelector('.step-status-badge').textContent = 'Complete';
+            }
+            
+            if (output) {
+                const detailsEl = document.getElementById(`step-details-${step}`);
+                if (detailsEl) {
+                    detailsEl.textContent = output;
+                }
+            }
+        }
+        
+        function errorStep(step, error) {
+            const stepEl = document.getElementById(`step-${step}`);
+            if (stepEl) {
+                stepEl.classList.remove('active');
+                stepEl.classList.add('error');
+                stepEl.querySelector('.step-icon').textContent = '❌';
+                stepEl.querySelector('.step-status-badge').className = 'step-status-badge badge-error';
+                stepEl.querySelector('.step-status-badge').textContent = 'Error';
+            }
+            
+            const detailsEl = document.getElementById(`step-details-${step}`);
+            if (detailsEl) {
+                detailsEl.textContent = `ERROR: ${error}`;
+            }
+        }
+        
+        function updateCard(cardName, status, details) {
+            const card = document.getElementById(`card-${cardName}`);
+            const statusEl = document.getElementById(`card-${cardName}-status`);
+            
+            if (!card || !statusEl) return;
+            
+            card.classList.remove('active', 'done', 'error');
+            
+            if (status === 'complete') {
+                card.classList.add('done');
+                statusEl.textContent = 'Complete ✓';
+            } else if (status === 'error') {
+                card.classList.add('error');
+                statusEl.textContent = 'Error ✗';
+            } else if (status === 'in_progress') {
+                card.classList.add('active');
+                statusEl.textContent = details || 'Running...';
+            } else {
+                statusEl.textContent = details || 'Pending';
+            }
+        }
+        
+        function updateProgress(percent, message) {
+            const fill = document.getElementById('progress-fill');
+            const text = document.getElementById('progress-text');
+            
+            if (fill) fill.style.width = percent + '%';
+            if (text) text.textContent = message || `${percent}% Complete`;
+        }
+        
+        function showFinalOutput(output, filename) {
+            const section = document.getElementById('output-section');
+            const outputEl = document.getElementById('final-output');
+            const fileBadge = document.getElementById('file-badge');
+            
+            if (section) section.style.display = 'block';
+            if (outputEl) outputEl.textContent = output;
+            if (fileBadge && filename) fileBadge.textContent = filename;
+            
+            // Scroll to output
+            section.scrollIntoView({ behavior: 'smooth' });
+            
+            // Mark output card as done
+            updateCard('output', 'complete', 'Complete ✓');
+            
+            // Re-enable button
+            document.getElementById('execute-btn').disabled = false;
+            document.getElementById('execute-btn').textContent = '▶ Execute Task';
+            isExecuting = false;
+        }
+        
+        function getStepIcon(step) {
+            const icons = {
+                1: '🧠',
+                2: '⚙️',
+                3: '🔍',
+                4: '📦',
+                5: '💾'
+            };
+            return icons[step] || '📋';
+        }
+        
+        async function executeTask() {
+            if (isExecuting) return;
+            
+            const task = document.getElementById('task-input').value.trim();
+            if (!task) {
+                alert('Please enter a task');
+                return;
+            }
+            
+            isExecuting = true;
+            const btn = document.getElementById('execute-btn');
+            btn.disabled = true;
+            btn.textContent = '🔄 Executing...';
+            
+            // Reset UI
+            resetUI();
+            
+            try {
+                const response = await fetch('/execute', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ task: task })
+                });
+                
+                if (!response.ok) {
+                    throw new Error('Failed to execute task');
+                }
+                
+                // SSE will handle updates
+            } catch (error) {
+                alert('Error: ' + error.message);
+                btn.disabled = false;
+                btn.textContent = '▶ Execute Task';
+                isExecuting = false;
+            }
+        }
+        
+        function resetUI() {
+            // Reset steps display
+            const stepsDisplay = document.getElementById('steps-display');
+            stepsDisplay.innerHTML = `
+                <div class="empty-state">
+                    <div class="empty-state-icon">⏳</div>
+                    <div class="empty-state-text">Steps will appear here in real-time</div>
+                </div>
+            `;
+            
+            // Reset cards
+            ['planning', 'execution', 'processing', 'output'].forEach(card => {
+                updateCard(card, 'pending', 'Pending');
+            });
+            
+            // Reset progress
+            updateProgress(0, 'Ready to execute');
+            
+            // Hide output section
+            document.getElementById('output-section').style.display = 'none';
+        }
+        
+        // Reconnect on visibility change
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible' && !eventSource) {
+                connectSSE();
+            }
+        });
+    </script>
+</body>
+</html>
