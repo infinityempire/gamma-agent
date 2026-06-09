@@ -11,6 +11,9 @@ on:
         description: 'GitHub Token for API access'
         required: true
 
+permissions:
+  contents: write
+
 jobs:
   execute-agent:
     runs-on: ubuntu-latest
