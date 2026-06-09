@@ -1,6 +1,8 @@
 name: Gamma Agent Execution
 
 on:
+  push:
+    branches: [master]
   workflow_dispatch:
     inputs:
       task:
