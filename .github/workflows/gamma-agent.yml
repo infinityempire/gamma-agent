@@ -1,6 +1,11 @@
 name: Gamma Agent - Cloud Execution
 
 on:
+  push:
+    # Run when anything is pushed to commands/ folder
+    paths:
+      - 'commands/**'
+
   workflow_dispatch:
     inputs:
       task:
@@ -30,12 +35,43 @@ jobs:
       - name: Install dependencies
         run: pip install flask flask-cors
 
+      - name: Check for commands
+        id: check_commands
+        run: |
+          echo "📁 Checking commands/ folder..."
+          
+          # Create folders if they don't exist
+          mkdir -p commands archive
+          
+          # Check if there are command files
+          if ls commands/*.txt 1> /dev/null 2>&1; then
+            echo "✅ Found commands to process!"
+            for file in commands/*.txt; do
+              echo "📋 Task: $(basename "$file")"
+              cat "$file"
+            done
+          else
+            echo "📭 No commands found. Use workflow_dispatch to send a task."
+            echo "❌ No tasks to process" >> $GITHUB_OUTPUT
+          fi
+
       - name: Run Gamma Agent
+        if: steps.check_commands.outputs.conclusion != 'skipped'
         run: |
           echo "=========================================="
           echo "🤖 GAMMA AGENT v3.0 - CLOUD EXECUTION"
           echo "=========================================="
-          echo "📋 Task: ${{ github.event.inputs.task }}"
+          
+          # Get task from commands folder or from input
+          TASK=""
+          if ls commands/*.txt 1> /dev/null 2>&1; then
+            # Get the first command file
+            TASK=$(cat commands/*.txt | head -1)
+          else
+            TASK="${{ github.event.inputs.task }}"
+          fi
+          
+          echo "📋 Task: $TASK"
           echo "⏰ Started: $(date)"
           echo ""
           
@@ -45,7 +81,7 @@ import sys
 sys.path.insert(0, '.')
 from gamma_server import execute_task_streaming, answer_question
 
-task = '''${{ github.event.inputs.task }}'''
+task = '''$TASK'''
 print('🚀 Executing task...')
 print('')
 
@@ -59,14 +95,23 @@ import datetime
 print(datetime.datetime.now())
 "
           
-      - name: Save response to file
+      - name: Archive completed commands
         run: |
-          mkdir -p responses
-          echo "# Gamma Agent Response" > responses/$(date +%Y%m%d_%H%M%S).md
-          echo "" >> responses/$(date +%Y%m%d_%H%M%S).md
-          echo "**Task:** ${{ github.event.inputs.task }}" >> responses/$(date +%Y%m%d_%H%M%S).md
-          echo "" >> responses/$(date +%Y%m%d_%H%M%S).md
-          echo "**Date:** $(date)" >> responses/$(date +%Y%m%d_%H%M%S).md
+          # Create archive folder
+          mkdir -p archive
+          
+          # Move completed command files to archive
+          if ls commands/*.txt 1> /dev/null 2>&1; then
+            for file in commands/*.txt; do
+              TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+              mv "$file" "archive/$(basename "$file" .txt)_${TIMESTAMP}.txt"
+              echo "📦 Archived: $(basename "$file")"
+            done
+          fi
+          
+          # List remaining commands
+          echo ""
+          echo "📁 Remaining commands: $(ls commands/*.txt 2>/dev/null | wc -l)"
 
       - name: Commit changes
         run: |
