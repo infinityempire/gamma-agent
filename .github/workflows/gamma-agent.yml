@@ -1,102 +1,68 @@
-name: Gamma Agent Execution
+name: Gamma Agent - Cloud Execution
 
 on:
-  push:
-    branches: [master]
   workflow_dispatch:
     inputs:
       task:
-        description: 'Task to execute'
+        description: 'Task for Gamma Agent'
         required: true
-        default: 'List all active services'
+        default: 'Who are the prime ministers of Israel?'
+      github_token:
+        description: 'GitHub Token (use ${{ secrets.GITHUB_TOKEN }})'
+        required: false
+        default: ''
 
 permissions:
   contents: write
   actions: write
+  pull-requests: write
 
 jobs:
-  setup:
-    runs-on: ubuntu-22.04
-    outputs:
-      matrix: ${{ steps.define-matrix.outputs.matrix }}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          token: ${{ secrets.GH_TOKEN }}
-
-      - id: define-matrix
-        run: |
-          # Generate unique run ID
-          RUN_ID=$(date +%s)
-          echo "matrix={\"run_id\":\"$RUN_ID\"}" >> $GITHUB_OUTPUT
-
   execute:
-    needs: setup
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          token: ${{ secrets.GH_TOKEN }}
 
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
       - name: Install dependencies
-        run: |
-          pip install flask flask-cors
+        run: pip install flask flask-cors
 
-      - name: Run Gamma Agent Server
+      - name: Run Gamma Agent
         run: |
-          # Run server in background
-          python3 gamma_server.py &
-          SERVER_PID=$!
-          echo "Server PID: $SERVER_PID"
-          echo $SERVER_PID > /tmp/server.pid
-          
-          # Wait for server to start
-          sleep 3
-          
-          # Get task from workflow input or use default
-          TASK="${{ github.event.inputs.task }}"
-          if [ -z "$TASK" ]; then
-            TASK="List all active services"
-          fi
-          
-          echo "📋 Executing Task: $TASK"
-          
-          # Execute task
-          curl -s -X POST http://localhost:5000/execute \
-            -H "Content-Type: application/json" \
-            -d "{\"task\": \"$TASK\"}"
-          
-          # Wait for execution to complete
-          sleep 10
-          
-          # Get status
-          echo "📊 Server Status:"
-          curl -s http://localhost:5000/status
-          
-          # Read and display report
+          echo "=========================================="
+          echo "🤖 GAMMA AGENT v3.0 - CLOUD EXECUTION"
+          echo "=========================================="
+          echo "📋 Task: ${{ github.event.inputs.task }}"
+          echo "⏰ Started: $(date)"
           echo ""
-          echo "📄 Generated Report:"
-          cat empire_report.txt
           
-          # Commit report if it was created
-          if [ -f empire_report.txt ]; then
-            git config --local user.email "github-actions[bot]@users.noreply.github.com"
-            git config --local user.name "github-actions[bot]"
-            git add empire_report.txt
-            git commit -m "🤖 Gamma Agent: Update report - $(date)" || echo "No changes to commit"
-            git push || echo "Could not push changes"
-          fi
-          
-          # Cleanup
-          kill $SERVER_PID 2>/dev/null || true
+          # Run the agent with the task
+          python3 -c "
+import sys
+sys.path.insert(0, '.')
+from gamma_server import execute_task_streaming, answer_question
 
-      - name: Display Results
-        if: always()
+task = '''${{ github.event.inputs.task }}'''
+print('🚀 Executing task...')
+print('')
+
+# Answer the question
+result = answer_question(task)
+print(result)
+print('')
+print('='*50)
+print('✅ Task completed at:', end=' ')
+import datetime
+print(datetime.datetime.now())
+"
+          
+      - name: Commit report
         run: |
-          echo "✅ Gamma Agent execution completed"
-          echo "Report location: empire_report.txt"
-          cat empire_report.txt 2>/dev/null || echo "No report generated"
+          git config --local user.email "gamma-agent[bot]@users.noreply.github.com"
+          git config --local user.name "Gamma Agent"
+          git add -A
+          git diff --staged --quiet || git commit -m "🤖 Gamma Agent: ${{ github.event.inputs.task }}"
+          git push || echo "Nothing to commit"
