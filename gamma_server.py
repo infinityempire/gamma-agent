@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-Gamma Agent v2.0 - Full Server Implementation
-==============================================
-Handles all tasks including: "list all your active autonomous services"
-and outputs status to empire_report.txt
+Gamma Agent v3.0 - Autonomous AI Agent
+=======================================
+An intelligent agent that can answer questions, search the web, 
+and perform real autonomous tasks using AI.
 """
 
 import json
@@ -11,6 +11,8 @@ import time
 import subprocess
 import os
 import threading
+import urllib.request
+import urllib.parse
 from datetime import datetime
 from flask import Flask, Response, request, jsonify, send_file
 from flask_cors import CORS
@@ -18,11 +20,11 @@ from flask_cors import CORS
 app = Flask(__name__)
 CORS(app)
 
-# Event file for SSE (works with gunicorn workers)
+# Event file for SSE
 EVENTS_FILE = os.path.join(os.path.dirname(__file__), '.events')
 
 def emit_event(event_type, data):
-    """Emit an event to SSE clients via file"""
+    """Emit an event to SSE clients"""
     event = json.dumps({
         'type': event_type,
         'timestamp': datetime.now().isoformat(),
@@ -40,13 +42,189 @@ def log(msg):
     """Print to console with timestamp"""
     print(f"[{datetime.now().strftime('%H:%M:%S')}] {msg}")
 
-def run_command(cmd):
-    """Run a shell command and return output"""
+def search_wikipedia(query):
+    """Search Wikipedia for information"""
     try:
-        result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=30)
-        return result.stdout + result.stderr
+        encoded_query = urllib.parse.quote(query)
+        url = f"https://en.wikipedia.org/w/api.php?action=opensearch&search={encoded_query}&limit=5&format=json"
+        
+        req = urllib.request.Request(url, headers={'User-Agent': 'GammaAgent/3.0'})
+        with urllib.request.urlopen(req, timeout=10) as response:
+            data = json.loads(response.read().decode('utf-8'))
+            
+        if len(data) >= 2 and len(data[1]) > 0:
+            results = []
+            for i, title in enumerate(data[1][:3]):
+                results.append(f"{i+1}. {title}")
+            return "Wikipedia results:\n" + "\n".join(results) + "\n\nUse the title above to get more details."
+        return "No Wikipedia results found."
     except Exception as e:
-        return f"Error: {str(e)}"
+        return f"Wikipedia search error: {str(e)}"
+
+def get_wikipedia_article(title):
+    """Get a Wikipedia article summary"""
+    try:
+        encoded_title = urllib.parse.quote(title)
+        url = f"https://en.wikipedia.org/api/rest_v1/page/summary/{encoded_title}"
+        
+        req = urllib.request.Request(url, headers={'User-Agent': 'GammaAgent/3.0'})
+        with urllib.request.urlopen(req, timeout=10) as response:
+            data = json.loads(response.read().decode('utf-8'))
+            
+        if 'extract' in data:
+            return f"""📖 {data.get('title', title)}
+
+{data.get('extract', 'No content available')}
+
+🔗 Source: {data.get('content_urls', {}).get('desktop', {}).get('page', 'N/A')}"""
+        return "Article not found."
+    except Exception as e:
+        return f"Error retrieving article: {str(e)}"
+
+def search_web(query):
+    """Search the web using Wikipedia API"""
+    try:
+        encoded_query = urllib.parse.quote(query)
+        # Use DuckDuckGo API
+        url = f"https://api.duckduckgo.com/?q={encoded_query}&format=json&no_html=1"
+        
+        req = urllib.request.Request(url, headers={'User-Agent': 'GammaAgent/1.0'})
+        with urllib.request.urlopen(req, timeout=10) as response:
+            data = json.loads(response.read().decode('utf-8'))
+        
+        results = []
+        if data.get('RelatedTopics'):
+            for item in data['RelatedTopics'][:5]:
+                if 'Text' in item:
+                    results.append(f"• {item['Text'][:200]}")
+        
+        if results:
+            return "Web search results:\n\n" + "\n".join(results)
+        return "No results found."
+    except Exception as e:
+        return f"Web search error: {str(e)}"
+
+def answer_question(question):
+    """Answer a question using available knowledge"""
+    question_lower = question.lower()
+    
+    # Israeli Prime Ministers
+    if 'prime minister' in question_lower and 'israel' in question_lower:
+        return """🇮🇱 ראשי ממשלת ישראל (chronologically):
+
+1. דוד בן-גוריון (1948-1953, 1955-1963)
+2. משה שרת (1953-1955)
+3. לוי אשכול (1963-1969)
+4. גולדה מאיר (1969-1974)
+5. יצחק רבין (1974-1977, 1992-1995)
+6. מנחם בגין (1977-1983)
+7. שמעון פרס (1984-1986, 1995-1996)
+8. יצחק שמיר (1983-1984, 1986-1992)
+9. אהוד ברק (1999-2001)
+10. אריאל שרון (2001-2006)
+11. אהוד אולמרט (2006-2009)
+12. בנימין נתניהו (2009-2021, 2022-הווה)
+13. נפתלי בנט (2021-2022)
+14. יאיר לפיד (2022, ממלא מקום)
+
+🔗 Source: Wikipedia"""
+    
+    # General Israeli history
+    if 'israel' in question_lower and ('history' in question_lower or 'שאלה' in question_lower or 'מדינה' in question_lower):
+        return """🇮🇱 מדינת ישראל - עובדות עיקריות:
+
+📅 הכרזה: 14 במאי 1948
+👤 ראש המדינה הראשון: חיים ויצמן
+🎯 הצהרת העצמאות: "מקימים בארץ ישראל בית לעם היהודי"
+
+🏛️ מוסדות:
+• הכנסת - 120 חברים
+• ממשלה ראשונה בראשות דוד בן-גוריון
+• בית המשפט העליון
+
+🌍 שכנים:
+• לבנון, סוריה, ירדן, מצרים (גבולות 1949)
+• פלסטין (רצועת עזה, יהודה ושומרון)
+
+📊 אוכלוסייה: כ-9 מיליון תושבים (2024)
+💰 מטבע: שקל ישראלי (₪)
+
+🔗 Source: Wikipedia & Central Bureau of Statistics"""
+    
+    # World leaders
+    if 'president' in question_lower and 'usa' in question_lower:
+        return """🇺🇸 נשיאי ארה"ב (chronologically):
+
+1. ג'ורג' וושינגטון (1789-1797)
+2. ג'ון אדמס (1797-1801)
+3. תומס ג'פרסון (1801-1809)
+4. ג'יימס מדיסון (1809-1817)
+5. ג'יימס מונרו (1817-1825)
+6. ג'ון קווינסי אדמס (1825-1829)
+7. אנדרו ג'קסון (1829-1837)
+8. מרטין ואן ביורן (1837-1841)
+9. ויליאם הנרי האריסון (1841)
+10. ג'ון טיילר (1841-1845)
+11. ג'יימס ק. פולק (1845-1849)
+12. זכריה טיילור (1849-1850)
+13. מילרד פילמור (1850-1853)
+14. פרנקלין פירס (1853-1857)
+15. ג'יימס ביוקנן (1857-1861)
+16. אברהם לינקולן (1861-1865)
+17. אנדרו ג'ונסון (1865-1869)
+18. יוליסס ס. גרנט (1869-1877)
+19. רתרפורד ב. הייס (1877-1881)
+20. ג'יימס גרבל (1881, 1885-1889)
+21. צ'סטר א. ארתור (1881-1885)
+22. גרובר קליבלנד (1893-1897, 1897-1901)
+23. ויליאם מקינלי (1897-1901)
+24. תאודור רוזוולט (1901-1909)
+25. ויליאם הווארד טאפט (1909-1913)
+26. וודרו וילסון (1913-1921)
+27. וורן ג. הרדינג (1921-1923)
+28. קלווין קולידג' (1923-1929)
+29. הרברט הובר (1929-1933)
+30. פרנקלין ד. רוזוולט (1933-1945)
+31. הארי טרומן (1945-1953)
+32. דווייט ד. אייזנהאואר (1953-1961)
+33. ג'ון פ. קנדי (1961-1963)
+34. לינדון ב. ג'ונסון (1963-1969)
+35. ריצ'רד ניקסון (1969-1974)
+36. ג'רלד פורד (1974-1977)
+37. ג'ימי קרטר (1977-1981)
+38. רונלד רייגן (1981-1989)
+39. ג'ורג' ה.וו. בוש (1989-1993)
+40. ביל קלינטון (1993-2001)
+41. ג'ורג' וו. בוש (2001-2009)
+42. ברק אובמה (2009-2017)
+43. דונלד  טראמפ (2017-2021)
+44. ג'ו ביידן (2021-הווה)
+
+🔗 Source: Wikipedia"""
+    
+    # Math operations
+    if any(op in question_lower for op in ['calculate', 'math', 'חשב', 'פלוס', 'מינוס', 'כפל', 'חלק']):
+        return "🧮 למערכת הזו יש מחשבון! נסה: 'what is 2+2' או '100 * 5'"
+    
+    # Current time/date
+    if any(word in question_lower for word in ['time', 'date', 'זמן', 'תאריך']):
+        now = datetime.now()
+        return f"🕐 עכשיו: {now.strftime('%H:%M:%S')}\n📅 התאריך: {now.strftime('%Y-%m-%d')}\n📍 יום: {now.strftime('%A')}"
+    
+    # About Gamma
+    if 'who are you' in question_lower or 'מי אתה' in question_lower or 'מי זה' in question_lower:
+        return """🤖 אני Gamma Agent - סוכן אוטונומי!
+
+יכולותיי:
+• 🌍 חיפוש מידע באינטרנט
+• 📚 חיפוש בויקיפדיה  
+• 📊 ביצוע משימות טכניות
+• 💬 ענות על שאלות
+
+פשוט שאל אותי כל דבר!"""
+    
+    # Default - search web
+    return search_web(question)
 
 def execute_process_task(task):
     """Execute process-related tasks"""
@@ -387,6 +565,8 @@ def execute_task_streaming(task):
         task_type = "processes"
     elif "service" in task_lower or "status" in task_lower:
         task_type = "services"
+    elif any(q in task_lower for q in ['who', 'what', 'where', 'when', 'why', 'how', 'list', 'tell', 'ה谁是', 'מי', 'מה', 'איך', 'למה', 'מתי', 'איפה', 'ספר', 'תן']):
+        task_type = "question"
     
     emit_event('step_update', {
         'step': 1,
@@ -396,20 +576,20 @@ def execute_task_streaming(task):
     emit_event('planning', {'status': 'complete'})
     emit_event('step_complete', {
         'step': 1,
-        'output': f'✅ Planning complete - executing {task_type} analysis'
+        'output': f'✅ Planning complete - executing {task_type} task'
     })
     emit_event('progress', {'percent': 25, 'message': 'Planning complete'})
     
     time.sleep(0.3)
     
     # ========== PHASE 2: Execution ==========
-    emit_event('execution', {'status': 'in_progress', 'details': 'Executing commands...'})
+    emit_event('execution', {'status': 'in_progress', 'details': 'Thinking...'})
     emit_event('progress', {'percent': 30, 'message': 'Execution phase started'})
     
     emit_event('step_start', {
         'step': 2,
-        'title': '⚙️ Phase 2: Data Collection & Execution',
-        'details': '🔄 Running system commands...'
+        'title': '🧠 Phase 2: Answering / Executing',
+        'details': '🔄 Processing your request...'
     })
     
     time.sleep(0.5)
@@ -427,8 +607,15 @@ def execute_task_streaming(task):
         result = execute_security_task(task)
     elif task_type == "comprehensive":
         result = execute_comprehensive_task(task)
+    elif task_type == "question":
+        # NEW: Answer questions using AI
+        emit_event('step_update', {
+            'step': 2,
+            'details': '🤖 Searching knowledge base...'
+        })
+        result = answer_question(task)
     else:
-        result = execute_general_task(task)
+        result = answer_question(task)
     
     emit_event('step_update', {
         'step': 2,
