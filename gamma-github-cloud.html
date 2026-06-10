@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gamma Agent - GitHub Cloud</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Arial, sans-serif;
+            background: linear-gradient(135deg, #0f0c29, #302b63, #24243e);
+            min-height: 100vh;
+            color: #fff;
+            padding: 20px;
+        }
+        .container { max-width: 900px; margin: 0 auto; }
+
+        header {
+            text-align: center;
+            padding: 30px;
+            background: rgba(255,255,255,0.05);
+            border-radius: 20px;
+            margin-bottom: 30px;
+            border: 2px solid #00d4ff;
+        }
+        h1 {
+            font-size: 2.5em;
+            background: linear-gradient(135deg, #00d4ff, #00ff88);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .subtitle { color: #94a3b8; margin-top: 10px; }
+
+        .section {
+            background: rgba(255,255,255,0.05);
+            border-radius: 15px;
+            padding: 25px;
+            margin-bottom: 20px;
+        }
+        .section h2 {
+            color: #00d4ff;
+            margin-bottom: 15px;
+            font-size: 1.3em;
+        }
+
+        .input-group { margin-bottom: 15px; }
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #00d4ff;
+            font-weight: bold;
+        }
+        input, textarea {
+            width: 100%;
+            padding: 12px;
+            border-radius: 10px;
+            border: 2px solid #00d4ff;
+            background: rgba(0,0,0,0.3);
+            color: #fff;
+            font-size: 16px;
+        }
+        input::placeholder, textarea::placeholder { color: #666; }
+
+        .btn {
+            width: 100%;
+            padding: 15px;
+            border-radius: 10px;
+            border: none;
+            font-size: 1.1em;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin-bottom: 10px;
+        }
+        .btn-primary {
+            background: linear-gradient(135deg, #00d4ff, #00ff88);
+            color: #000;
+        }
+        .btn-primary:hover {
+            transform: scale(1.02);
+            box-shadow: 0 0 30px rgba(0,212,255,0.5);
+        }
+        .btn-primary:disabled {
+            background: #666;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        #output {
+            background: #000;
+            border-radius: 10px;
+            padding: 20px;
+            min-height: 300px;
+            max-height: 500px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            white-space: pre-wrap;
+            color: #0f0;
+        }
+        .status {
+            padding: 10px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            text-align: center;
+        }
+        .status.running { background: rgba(255,165,0,0.2); color: #ffa500; }
+        .status.success { background: rgba(0,255,0,0.2); color: #0f0; }
+        .status.error { background: rgba(255,0,0,0.2); color: #f00; }
+
+        .footer {
+            text-align: center;
+            margin-top: 30px;
+            color: #666;
+            font-size: 0.9em;
+        }
+
+        @media (max-width: 600px) {
+            h1 { font-size: 1.8em; }
+            .container { padding: 10px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🤖 Gamma Agent</h1>
+            <p class="subtitle">Autonomous AI Agent - Powered by GitHub Actions</p>
+        </header>
+
+        <div class="section">
+            <h2>📝 Ask anything!</h2>
+            
+            <div class="input-group">
+                <label>Your Question / Task:</label>
+                <textarea id="task" rows="4" placeholder="Who are the prime ministers of Israel?&#10;What is the capital of Japan?&#10;Tell me about World War 2;"></textarea>
+            </div>
+
+            <button class="btn btn-primary" id="executeBtn" onclick="executeTask()">
+                🚀 Execute Task
+            </button>
+        </div>
+
+        <div class="section">
+            <h2>📊 Status</h2>
+            <div id="status" class="status">Ready to execute</div>
+            
+            <div id="output">Output will appear here after execution...</div>
+        </div>
+
+        <div class="section">
+            <h2>💡 Example Questions</h2>
+            <ul style="color: #94a3b8; line-height: 2;">
+                <li>Who are the prime ministers of Israel?</li>
+                <li>What is the capital of France?</li>
+                <li>Tell me about artificial intelligence</li>
+                <li>Who was Albert Einstein?</li>
+                <li>What is Python programming?</li>
+            </ul>
+        </div>
+
+        <div class="footer">
+            <p>Powered by GitHub Actions | Free & Open Source</p>
+        </div>
+    </div>
+
+    <script>
+        let workflowRunId = null;
+        let pollInterval = null;
+
+        async function executeTask() {
+            const task = document.getElementById('task').value.trim();
+            if (!task) {
+                alert('Please enter a task!');
+                return;
+            }
+
+            const btn = document.getElementById('executeBtn');
+            const status = document.getElementById('status');
+            const output = document.getElementById('output');
+
+            btn.disabled = true;
+            btn.textContent = '⏳ Running...';
+            status.className = 'status running';
+            status.textContent = '🚀 Starting workflow...';
+            output.textContent = 'Connecting to GitHub...\n';
+
+            try {
+                // Get repo info from URL
+                const repo = 'infinityempire/gamma-agent';
+                
+                // Trigger workflow dispatch
+                status.textContent = '📤 Triggering workflow...';
+                
+                const response = await fetch(`https://api.github.com/repos/${repo}/actions/workflows/gamma-agent.yml/dispatches`, {
+                    method: 'POST',
+                    headers: {
+                        'Accept': 'application/vnd.github.v3+json',
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        ref: 'master',
+                        inputs: {
+                            task: task
+                        }
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`GitHub API error: ${response.status}`);
+                }
+
+                status.textContent = '⏳ Waiting for execution...';
+                output.textContent = 'Workflow triggered! Waiting for results...\n\n';
+                
+                // Wait a moment for the workflow to start
+                await new Promise(r => setTimeout(r, 5000));
+
+                // Poll for workflow status
+                pollWorkflowStatus(repo, task);
+
+            } catch (error) {
+                status.className = 'status error';
+                status.textContent = '❌ Error: ' + error.message;
+                output.textContent = 'Error: ' + error.message + '\n\n';
+                output.textContent += 'Note: GitHub token required for API access.\n';
+                output.textContent += 'Try running the workflow manually from the Actions tab.';
+                btn.disabled = false;
+                btn.textContent = '🚀 Execute Task';
+            }
+        }
+
+        async function pollWorkflowStatus(repo, task) {
+            try {
+                // Get latest workflow run
+                const response = await fetch(`https://api.github.com/repos/${repo}/actions/runs?per_page=1`, {
+                    headers: { 'Accept': 'application/vnd.github.v3+json' }
+                });
+
+                if (!response.ok) throw new Error('Failed to get workflow status');
+
+                const data = await response.json();
+                const run = data.workflow_runs[0];
+
+                if (!run) {
+                    document.getElementById('output').textContent += 'No workflow found...\n';
+                    return;
+                }
+
+                const status = document.getElementById('status');
+                const output = document.getElementById('output');
+                const btn = document.getElementById('executeBtn');
+
+                if (run.status === 'completed') {
+                    status.className = run.conclusion === 'success' ? 'status success' : 'status error';
+                    status.textContent = run.conclusion === 'success' ? '✅ Completed!' : '❌ Failed';
+                    
+                    output.textContent = `✅ Task completed!\n\n`;
+                    output.textContent += `📋 Task: ${task}\n`;
+                    output.textContent += `⏱️ Duration: ${Math.round((new Date(run.updated_at) - new Date(run.created_at)) / 1000)}s\n\n`;
+                    output.textContent += `View full logs at:\nhttps://github.com/${repo}/actions\n\n`;
+                    output.textContent += `💡 The agent runs on GitHub Actions for free!\n`;
+                    
+                    btn.disabled = false;
+                    btn.textContent = '🚀 Execute Another Task';
+                    clearInterval(pollInterval);
+                } else {
+                    status.textContent = `⏳ Running... (${run.status})`;
+                    output.textContent += `• Workflow ${run.status}...\n`;
+                }
+
+            } catch (error) {
+                document.getElementById('status').textContent = '❌ Error: ' + error.message;
+            }
+        }
+
+        // Poll every 5 seconds
+        setInterval(() => {
+            if (workflowRunId) {
+                // Continue polling
+            }
+        }, 5000);
+    </script>
+</body>
+</html>
