@@ -1,0 +1,41 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+
+# Virtual environments
+venv/
+env/
+.venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs
+*.log
+server.log
+server_new.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Events file (runtime)
+.events
+
+# Reports (generated)
+empire_report.txt
+empire_report_test.txt
+
+# Cache
+*.cache
