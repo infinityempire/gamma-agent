@@ -944,14 +944,11 @@ def get_report():
 if __name__ == '__main__':
     print("""
 ╔══════════════════════════════════════════════════════════════════════╗
-║                        GAMMA AGENT v2.0                               ║
-║              Full Standalone Server with UI                           ║
+║                        GAMMA AGENT v3.0                              ║
+║              Autonomous AI Agent - Cloud Ready                       ║
 ╠══════════════════════════════════════════════════════════════════════╣
-║  🚀 Server: http://localhost:5000                                    ║
-║  📡 SSE:   http://localhost:5000/events                               ║
-║  📝 Task:  POST /execute                                              ║
-║  📄 Report: GET /report                                               ║
+║  🚀 Server starting...                                              ║
 ╚══════════════════════════════════════════════════════════════════════╝
     """)
     
-    app.run(host='0.0.0.0', port=5000, debug=True, threaded=True)
+    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)), debug=False)
