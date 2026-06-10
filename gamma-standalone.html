@@ -555,20 +555,45 @@
                 console.log('✅ Connected to server');
             };
             
-            eventSource.onerror = () => {
+            eventSource.onerror = (error) => {
                 updateConnectionStatus('disconnected');
-                console.log('❌ Connection lost, retrying...');
+                console.error('❌ SSE Connection error:', error);
+                
+                // Show error message to user
+                const errorMsg = document.getElementById('error-message') || createErrorElement();
+                if (errorMsg) {
+                    errorMsg.textContent = 'Connection lost. Retrying...';
+                    errorMsg.style.display = 'block';
+                }
+                
                 setTimeout(connectSSE, 3000);
             };
-            
+
             eventSource.onmessage = (event) => {
                 try {
                     const data = JSON.parse(event.data);
+                    console.log('📡 Event received:', data.type);
                     handleEvent(data);
+                    
+                    // Hide any previous error message
+                    const errorMsg = document.getElementById('error-message');
+                    if (errorMsg) errorMsg.style.display = 'none';
                 } catch (e) {
-                    // Ignore non-JSON messages
+                    console.warn('Non-JSON message received:', event.data);
                 }
             };
+            
+            function createErrorElement() {
+                const container = document.querySelector('.container');
+                if (container) {
+                    const errorDiv = document.createElement('div');
+                    errorDiv.id = 'error-message';
+                    errorDiv.style.cssText = 'background: rgba(255,68,68,0.2); border: 2px solid #ff4444; padding: 15px; border-radius: 10px; margin-bottom: 20px; text-align: center; display: none;';
+                    container.insertBefore(errorDiv, container.firstChild);
+                    return errorDiv;
+                }
+                return null;
+            }
         }
         
         function updateConnectionStatus(status) {
@@ -628,6 +653,10 @@
                     
                 case 'final_output':
                     showFinalOutput(data.output, data.file);
+                    break;
+                    
+                default:
+                    console.log('Unknown event type:', data.type, data);
                     break;
             }
         }
