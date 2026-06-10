@@ -7,10 +7,10 @@ on:
         description: 'Task for Gamma Agent'
         required: true
         default: 'Who are the prime ministers of Israel?'
-      github_token:
-        description: 'GitHub Token (use ${{ secrets.GITHUB_TOKEN }})'
-        required: false
-        default: ''
+
+  schedule:
+    # Run every hour - free tier has 2000 minutes/month
+    - cron: '0 * * * *'
 
 permissions:
   contents: write
@@ -59,10 +59,19 @@ import datetime
 print(datetime.datetime.now())
 "
           
-      - name: Commit report
+      - name: Save response to file
+        run: |
+          mkdir -p responses
+          echo "# Gamma Agent Response" > responses/$(date +%Y%m%d_%H%M%S).md
+          echo "" >> responses/$(date +%Y%m%d_%H%M%S).md
+          echo "**Task:** ${{ github.event.inputs.task }}" >> responses/$(date +%Y%m%d_%H%M%S).md
+          echo "" >> responses/$(date +%Y%m%d_%H%M%S).md
+          echo "**Date:** $(date)" >> responses/$(date +%Y%m%d_%H%M%S).md
+
+      - name: Commit changes
         run: |
           git config --local user.email "gamma-agent[bot]@users.noreply.github.com"
           git config --local user.name "Gamma Agent"
           git add -A
-          git diff --staged --quiet || git commit -m "🤖 Gamma Agent: ${{ github.event.inputs.task }}"
+          git diff --staged --quiet || git commit -m "🤖 Gamma Agent: $(date)"
           git push || echo "Nothing to commit"
