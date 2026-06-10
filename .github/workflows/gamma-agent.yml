@@ -67,25 +67,7 @@ jobs:
           echo "🔁 Max Iterations: ${{ github.event.inputs.max_iterations }}"
           echo "⏰ Started: $(date)"
           echo ""
-          
-          TASK="${{ github.event.inputs.task }}"
-          
-          python3 -c "
-import sys
-sys.path.insert(0, '.')
-from gamma_server import answer_question
-
-task = '''$TASK'''
-print('🚀 Executing task...')
-print('')
-result = answer_question(task)
-print(result)
-print('')
-print('='*50)
-print('✅ Task completed at:', end=' ')
-import datetime
-print(datetime.datetime.now())
-"
+          python3 run_agent.py
           
       - name: Archive completed commands
         run: |
