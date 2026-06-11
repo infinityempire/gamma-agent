@@ -40,11 +40,9 @@ echo ""
 echo -e "${YELLOW}🔄 Connecting to GitHub...${NC}"
 git clone https://github.com/$REPO.git /tmp/gamma-agent 2>/dev/null || {
     echo -e "${YELLOW}📁 Repo already exists, pulling latest...${NC}"
-    cd /tmp/gamma-agent
     git pull
 }
 
-cd /tmp/gamma-agent
 
 # Create commands folder if not exists
 mkdir -p $COMMANDS_DIR
