@@ -89,3 +89,18 @@ Git Status:
 [2026-06-11 18:01:41] [ACTION] ACTION: GEMINI_UNAVAILABLE | Details: Show me the current directory contents | Result: Falling back to analyze_and_execute
 [2026-06-11 18:01:41] [ACTION] ACTION: TASK_OUTPUT_SAVED | Details: Task a38c4e4b | Result: Saved to task_a38c4e4b_20260611_180141.txt
 [2026-06-11 18:01:41] [COMPLETION] TASK_COMPLETED: Show me the current directory contents
+[2026-06-11 18:03:14] [REGISTRY] Tool registered: execute_shell
+[2026-06-11 18:03:14] [REGISTRY] Tool registered: read_file
+[2026-06-11 18:03:14] [REGISTRY] Tool registered: write_file
+[2026-06-11 18:03:14] [REGISTRY] Tool registered: delete_file
+[2026-06-11 18:03:14] [REGISTRY] Tool registered: list_directory
+[2026-06-11 18:03:14] [REGISTRY] Tool registered: search_files
+[2026-06-11 18:03:14] [REGISTRY] Tool registered: github_list_repos
+[2026-06-11 18:03:14] [REGISTRY] Tool registered: github_create_file
+[2026-06-11 18:03:14] [REGISTRY] Tool registered: github_run_workflow
+[2026-06-11 18:03:14] [REGISTRY] Tool registered: get_system_info
+[2026-06-11 18:03:14] [REGISTRY] Tool registered: search_web
+[2026-06-11 18:03:14] [REGISTRY] Tool registered: analyze_and_execute
+[2026-06-11 18:03:14] [ACTION] ACTION: GEMINI_UNAVAILABLE | Details: List files in current directory | Result: Falling back to analyze_and_execute
+[2026-06-11 18:03:14] [ACTION] ACTION: TASK_OUTPUT_SAVED | Details: Task 19fbf3ea | Result: Saved to task_19fbf3ea_20260611_180314.txt
+[2026-06-11 18:03:14] [COMPLETION] TASK_COMPLETED: List files in current directory
