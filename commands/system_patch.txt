@@ -1,0 +1,1 @@
+1. Run a dry-run check on the repository for any broken symlinks or 'TODO' comments in the code that are older than 30 days. 2. Verify that all scripts in 'commands/' have execution permissions (chmod +x). 3. If you find a script without execution permissions, fix it. 4. If you find a 'TODO' that is outdated, mark it as 'DEPRECATED' and log it to 'archive/tech_debt_audit.txt'.
