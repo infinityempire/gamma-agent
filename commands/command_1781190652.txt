@@ -1,0 +1,1 @@
+Write a list of Israeli Prime Ministers into a file named output.txt and then copy that file to archive/result.txt
