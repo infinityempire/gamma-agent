@@ -31,20 +31,36 @@ if [ -z "$1" ]; then
     exit 1
 fi
 
+# Check for GH_TOKEN
+if [ -z "$GH_TOKEN" ]; then
+    echo -e "${RED}❌ Error: GH_TOKEN environment variable is not set!${NC}"
+    echo ""
+    echo "Please set it before running:"
+    echo "  export GH_TOKEN=your_token_here"
+    exit 1
+fi
+
 TASK="$1"
 
 echo -e "${YELLOW}📋 Task:${NC} $TASK"
 echo ""
 
-# Clone repo
+# Clone repo using token-authenticated URL
+CLONE_URL="https://x-access-token:${GH_TOKEN}@github.com/${REPO}.git"
+
 echo -e "${YELLOW}🔄 Connecting to GitHub...${NC}"
-git clone https://github.com/$REPO.git /tmp/gamma-agent 2>/dev/null || {
-    echo -e "${YELLOW}📁 Repo already exists, pulling latest...${NC}"
-    cd /tmp/gamma-agent
-    git pull
+rm -rf /tmp/gamma-agent
+git clone "$CLONE_URL" /tmp/gamma-agent 2>/dev/null || {
+    echo -e "${RED}❌ Failed to clone repository. Check your GH_TOKEN.${NC}"
+    exit 1
 }
 
 cd /tmp/gamma-agent
+
+# Configure git identity and authenticated remote
+git config user.email "gamma-agent[bot]@users.noreply.github.com"
+git config user.name "Gamma Agent"
+git remote set-url origin "$CLONE_URL"
 
 # Create commands folder if not exists
 mkdir -p $COMMANDS_DIR
