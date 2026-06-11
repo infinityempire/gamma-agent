@@ -1,0 +1,1 @@
+1. Search for any text files in the root directory that contain 'lead' or 'contact' in the filename. 2. List the total file count in the 'archive' folder to see if we have accumulated too much data. 3. Summarize the findings and write them to archive/data_audit.txt.
