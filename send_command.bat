@@ -29,20 +29,34 @@ if "%~1"=="" (
 
 set TASK=%~1
 
-echo 📋 Task: %TASK%
+:: Check for GH_TOKEN
+if "%GH_TOKEN%"=="" (
+    echo.
+    echo Error: GH_TOKEN environment variable is not set!
+    echo.
+    echo Please set it before running:
+    echo   set GH_TOKEN=your_token_here
+    exit /b 1
+)
+
+echo Task: %TASK%
 echo.
 
-echo 🔄 Connecting to GitHub...
-git clone https://github.com/%REPO%.git temp_gamma 2>nul
+echo Connecting to GitHub...
+set CLONE_URL=https://x-access-token:%GH_TOKEN%@github.com/%REPO%.git
+if exist temp_gamma rmdir /s /q temp_gamma
+git clone "%CLONE_URL%" temp_gamma
 if %errorlevel% neq 0 (
-    echo 📁 Repo exists, pulling latest...
-    cd temp_gamma
-    git pull
-    goto :continue
+    echo.
+    echo Error: Failed to clone repository. Check your GH_TOKEN.
+    exit /b 1
 )
 
 :continue
 cd temp_gamma
+git config user.email "gamma-agent[bot]@users.noreply.github.com"
+git config user.name "Gamma Agent"
+git remote set-url origin "%CLONE_URL%"
 
 :: Create commands folder if not exists
 if not exist %COMMANDS_DIR% mkdir %COMMANDS_DIR%
