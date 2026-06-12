@@ -18,7 +18,27 @@ from flask import Flask, Response, request, jsonify, send_file
 from flask_cors import CORS
 
 app = Flask(__name__)
-CORS(app)
+
+# ── Security: CORS Configuration ─────────────────────────────────────────────
+# Restrict CORS to specific origins in production
+ALLOWED_ORIGINS = os.environ.get("ALLOWED_ORIGINS", "*").split(",")
+CORS(app, resources={r"/api/*": {"origins": ALLOWED_ORIGINS}})
+
+# ── Security: Disable debug mode in production ────────────────────────────────
+DEBUG_MODE = os.environ.get("FLASK_DEBUG", "false").lower() == "true"
+
+# ── Rate Limiting & Retry Config ─────────────────────────────────────────────
+HTTP_RETRIES     = 3
+HTTP_BACKOFF     = [5, 15, 30]
+RATE_LIMIT_DELAY = 60
+
+# HTTP Status Codes
+HTTP_OK             = 200
+HTTP_BAD_REQUEST    = 400
+HTTP_UNAUTHORIZED   = 401
+HTTP_FORBIDDEN      = 403
+HTTP_RATE_LIMIT     = 429
+HTTP_SERVER_ERROR   = 500
 
 # Event file for SSE
 EVENTS_FILE = os.path.join(os.path.dirname(__file__), '.events')
