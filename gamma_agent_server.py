@@ -15,7 +15,27 @@ from flask import Flask, Response, request, jsonify
 from flask_cors import CORS
 
 app = Flask(__name__)
-CORS(app)
+
+# ── Security: CORS Configuration ─────────────────────────────────────────────
+# Restrict CORS to specific origins in production
+ALLOWED_ORIGINS = os.environ.get("ALLOWED_ORIGINS", "*").split(",")
+CORS(app, resources={r"/api/*": {"origins": ALLOWED_ORIGINS}})
+
+# ── Security: Disable debug mode in production ────────────────────────────────
+DEBUG_MODE = os.environ.get("FLASK_DEBUG", "false").lower() == "true"
+
+# ── Rate Limiting & Retry Config ─────────────────────────────────────────────
+HTTP_RETRIES     = 3
+HTTP_BACKOFF     = [5, 15, 30]
+RATE_LIMIT_DELAY = 60
+
+# HTTP Status Codes
+HTTP_OK             = 200
+HTTP_BAD_REQUEST    = 400
+HTTP_UNAUTHORIZED   = 401
+HTTP_FORBIDDEN      = 403
+HTTP_RATE_LIMIT     = 429
+HTTP_SERVER_ERROR   = 500
 
 # Global event queue for SSE
 event_queue = []
@@ -277,7 +297,7 @@ def execute_tests(task):
 
 
 def execute_git_operations(task):
-    """Execute git operations"""
+    """Execute git operations safely without shell injection"""
     emit_event('step_update', {
         'step': 2,
         'details': '🔀 מבצע פעולות Git...'
@@ -290,18 +310,34 @@ def execute_git_operations(task):
     })
     time.sleep(0.3)
     
-    # Check git status
+    # Check git status - using list form of args to prevent injection
     try:
-        result = subprocess.run('cd /workspace/project && git status 2>&1 || echo "Not a git repo"', 
-                              shell=True, capture_output=True, text=True, timeout=5)
+        result = subprocess.run(
+            ['git', 'status'],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            cwd='/workspace/project'
+        )
+        output = result.stdout[:1000] if result.stdout else result.stderr[:500] or '(no output)'
         emit_event('step_update', {
             'step': 2,
-            'details': f"📋 מצב Git:\n{result.stdout[:1000]}"
+            'details': f"📋 מצב Git:\n{output}"
+        })
+    except subprocess.TimeoutExpired:
+        emit_event('step_update', {
+            'step': 2,
+            'details': "❌ פקודת Git הסתיימה - Timeout"
+        })
+    except FileNotFoundError:
+        emit_event('step_update', {
+            'step': 2,
+            'details': "ℹ️ Git לא מותקן במערכת"
         })
     except Exception as e:
         emit_event('step_update', {
             'step': 2,
-            'details': f"ℹ️ לא נמצא Repository קיים: {str(e)}"
+            'details': f"ℹ️ לא נמצא Repository: {str(e)}"
         })
 
 
@@ -406,11 +442,14 @@ if __name__ == '__main__':
 ║  🚀 Server starting on http://localhost:5000                  ║
 ║  📡 SSE endpoint: /events                                     ║
 ║  📝 Execute endpoint: POST /execute                            ║
+║  🔒 Debug mode: {}                                             ║
+║  🌐 Allowed CORS origins: {}                                   ║
 ╚══════════════════════════════════════════════════════════════╝
-    """)
+    """.format("ON" if DEBUG_MODE else "OFF", ALLOWED_ORIGINS))
     
     # Create static folder for HTML
     static_dir = os.path.dirname(os.path.abspath(__file__))
     app.static_folder = static_dir
     
-    app.run(host='0.0.0.0', port=5000, debug=True, threaded=True)
+    # Run with debug controlled by environment variable
+    app.run(host='0.0.0.0', port=5000, debug=DEBUG_MODE, threaded=True)
