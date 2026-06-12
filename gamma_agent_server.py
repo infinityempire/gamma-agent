@@ -195,34 +195,49 @@ def execute_system_check():
     
     time.sleep(0.3)
     
-    # Run system info commands
+    # Run system info commands - using list form to prevent shell injection
     commands = [
-        ('uname -a', 'מידע על המערכת'),
-        ('df -h', 'מצב הדיסק'),
-        ('free -h', 'מצב הזיכרון'),
-        ('ps aux | head -10', 'תהליכים פעילים')
+        (['uname', '-a'], 'מידע על המערכת', 'uname -a'),
+        (['df', '-h'], 'מצב הדיסק', 'df -h'),
+        (['free', '-h'], 'מצב הזיכרון', 'free -h'),
+        (['ps', 'aux'], 'תהליכים פעילים', 'ps aux'),
     ]
-    
-    for cmd, desc in commands:
+
+    for cmd_list, desc, cmd_display in commands:
         emit_event('step_update', {
             'step': 2,
-            'details': f"📌 {desc}\n$ {cmd}"
+            'details': f"📌 {desc}\n$ {cmd_display}"
         })
         time.sleep(0.3)
-        
+
         try:
-            result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=5)
-            output = result.stdout[:500] if result.stdout else '(no output)'
+            result = subprocess.run(
+                cmd_list,
+                shell=False,
+                capture_output=True,
+                text=True,
+                timeout=5
+            )
+            # For ps aux, limit to first 10 lines manually (replaces | head -10)
+            stdout = result.stdout or ''
+            if cmd_list[0] == 'ps':
+                stdout = '\n'.join(stdout.splitlines()[:10])
+            output = stdout[:500] if stdout else '(no output)'
             emit_event('step_update', {
                 'step': 2,
-                'details': f"📌 {desc}\n$ {cmd}\n{'-'*30}\n{output}"
+                'details': f"📌 {desc}\n$ {cmd_display}\n{'-'*30}\n{output}"
+            })
+        except FileNotFoundError:
+            emit_event('step_update', {
+                'step': 2,
+                'details': f"📌 {desc}\n$ {cmd_display}\nℹ️ פקודה לא נמצאה במערכת"
             })
         except Exception as e:
             emit_event('step_update', {
                 'step': 2,
-                'details': f"📌 {desc}\n$ {cmd}\n❌ Error: {str(e)}"
+                'details': f"📌 {desc}\n$ {cmd_display}\n❌ Error: {str(e)}"
             })
-        
+
         time.sleep(0.2)
 
 
