@@ -1,0 +1,41 @@
+Task ID: e4f34f1e
+Timestamp: 2026-06-11T18:55:38.074927
+============================================================
+OUTPUT:
+============================================================
+### Directory Listing
+$ ls -la .
+total 352
+drwxr-xr-x 7 runner runner  4096 Jun 11 18:55 .
+drwxr-xr-x 3 runner runner  4096 Jun 11 18:55 ..
+-rw-r--r-- 1 runner runner   121 Jun 11 18:55 .events
+drwxr-xr-x 7 runner runner  4096 Jun 11 18:55 .git
+drwxr-xr-x 3 runner runner  4096 Jun 11 18:55 .github
+-rw-r--r-- 1 runner runner   340 Jun 11 18:55 .gitignore
+-rw-r--r-- 1 runner runner   708 Jun 11 18:55 README.md
+drwxr-xr-x 2 runner runner  4096 Jun 11 18:55 __pycache__
+drwxr-xr-x 2 runner runner  4096 Jun 11 18:55 archive
+drwxr-xr-x 2 runner runner  4096 Jun 11 18:55 commands
+-rw-r--r-- 1 runner runner 14771 Jun 11 18:55 empire_report.txt
+-rw-r--r-- 1 runner runner  2344 Jun 11 18:55 empire_report_test.txt
+-rw-r--r-- 1 runner runner 17176 Jun 11 18:55 gamma-actions.html
+-rw-r--r-- 1 runner runner 21456 Jun 11 18:55 gamma-agent.html
+-rw-r--r-- 1 runner runner 21719 Jun 11 18:55 gamma-cloud.html
+-rw-r--r-- 1 runner runner 10064 Jun 11 18:55 gamma-github-cloud.html
+-rw-r--r-- 1 runner runner 28738 Jun 11 18:55 gamma-standalone.html
+-rw-r--r-- 1 runner runner 13755 Jun 11 18:55 gamma_agent_server.py
+-rw-r--r-- 1 runner runner 38589 Jun 11 18:55 gamma_server.py
+-rwxr-xr-x 1 runner runner   861 Jun 11 18:55 quick.sh
+-rw-r--r-- 1 runner runner    95 Jun 11 18:55 requirements.txt
+-rw-r--r-- 1 runner runner  1747 Jun 11 18:55 run_agent.py
+-rw-r--r-- 1 runner runner   165 Jun 11 18:55 run_server.py
+-rw-r--r-- 1 runner runner  2155 Jun 11 18:55 send_command.bat
+-rwxr-xr-x 1 runner runner  2256 Jun 11 18:55 send_command.sh
+-rw-r--r-- 1 runner runner  1353 Jun 11 18:55 server.log
+-rw-r--r-- 1 runner runner 81184 Jun 11 18:55 server_new.log
+-rw-r--r-- 1 runner runner  1834 Jun 11 18:55 start.bat
+-rwxr-xr-x 1 runner runner  1972 Jun 11 18:55 start.sh
+-rw-r--r-- 1 runner runner  1097 Jun 11 18:55 test_sse.py
+-rw-r--r-- 1 runner runner  1358 Jun 11 18:55 test_tasks.py
+
+

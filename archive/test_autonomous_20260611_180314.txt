@@ -1,0 +1,1 @@
+Show me the git status and list the archive directory

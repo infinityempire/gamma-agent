@@ -1,19 +1,33 @@
 #!/usr/bin/env python3
 """
-Gamma Agent v3.0 - Autonomous AI Agent
-=======================================
-An intelligent agent that can answer questions, search the web, 
-and perform real autonomous tasks using AI.
+Gamma Agent v4.0 - Autonomous Execution Agent
+=============================================
+An intelligent autonomous agent with tool-calling capabilities
+using Google Generative AI.
+
+Capabilities:
+- Dynamic Tool Registry with function schemas
+- Shell command execution
+- File system management
+- GitHub repository integration
+- Persistence logging to archive/agent_log.txt
+- Autonomous command file execution from commands/ directory
 """
 
 import json
 import time
 import subprocess
 import os
+import re
 import threading
 import urllib.request
 import urllib.parse
+import hashlib
 from datetime import datetime
+from pathlib import Path
+from typing import Dict, List, Any, Optional, Callable
+
+# Flask setup
 from flask import Flask, Response, request, jsonify, send_file
 from flask_cors import CORS
 
@@ -40,16 +54,826 @@ HTTP_FORBIDDEN      = 403
 HTTP_RATE_LIMIT     = 429
 HTTP_SERVER_ERROR   = 500
 
-# Event file for SSE
-EVENTS_FILE = os.path.join(os.path.dirname(__file__), '.events')
+# Configuration
+REPO_DIR = os.path.dirname(os.path.abspath(__file__))
+ARCHIVE_DIR = os.path.join(REPO_DIR, 'archive')
+COMMANDS_DIR = os.path.join(REPO_DIR, 'commands')
+EVENTS_FILE = os.path.join(REPO_DIR, '.events')
+LOG_FILE = os.path.join(ARCHIVE_DIR, 'agent_log.txt')
+GITHUB_TOKEN = os.environ.get('GH_TOKEN', os.environ.get('GITHUB_TOKEN', ''))
+GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY', '')
 
-def emit_event(event_type, data):
+# Ensure directories exist
+os.makedirs(ARCHIVE_DIR, exist_ok=True)
+os.makedirs(COMMANDS_DIR, exist_ok=True)
+
+# ============================================================================
+# LOGGING SYSTEM
+# ============================================================================
+
+def log_to_file(message: str, level: str = "INFO"):
+    """Log message to archive/agent_log.txt with timestamp"""
+    timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    log_entry = f"[{timestamp}] [{level}] {message}\n"
+    
+    with open(LOG_FILE, 'a') as f:
+        f.write(log_entry)
+    
+    print(f"[{timestamp}] [{level}] {message}")
+
+def log_action(action: str, details: str = "", result: str = "SUCCESS"):
+    """Log an agent action with full details"""
+    log_to_file(f"ACTION: {action} | Details: {details} | Result: {result}", "ACTION")
+
+def log_tool_call(tool_name: str, args: Dict, result: str):
+    """Log a tool call"""
+    args_str = json.dumps(args, ensure_ascii=False)[:200]
+    log_to_file(f"TOOL_CALL: {tool_name} | Args: {args_str} | Result: {result[:200]}", "TOOL")
+
+def save_task_output(task_id: str, output: str, error: str = None):
+    """Save task output to a dedicated file"""
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    filename = f"task_{task_id}_{timestamp}.txt"
+    filepath = os.path.join(ARCHIVE_DIR, filename)
+    
+    content = f"""Task ID: {task_id}
+Timestamp: {datetime.now().isoformat()}
+{'=' * 60}
+OUTPUT:
+{'=' * 60}
+{output}
+"""
+    if error:
+        content += f"""
+{'=' * 60}
+ERROR:
+{'=' * 60}
+{error}
+"""
+    
+    with open(filepath, 'w') as f:
+        f.write(content)
+    
+    log_action("TASK_OUTPUT_SAVED", f"Task {task_id}", f"Saved to {filename}")
+    return filepath
+
+# ============================================================================
+# TOOL REGISTRY SYSTEM
+# ============================================================================
+
+class ToolRegistry:
+    """Dynamic registry for agent tools with function schemas"""
+    
+    def __init__(self):
+        self.tools: Dict[str, Callable] = {}
+        self.schemas: List[Dict] = []
+    
+    def register(self, name: str, description: str, parameters: Dict, func: Callable):
+        """Register a tool with its schema"""
+        self.tools[name] = func
+        self.schemas.append({
+            "name": name,
+            "description": description,
+            "parameters": parameters
+        })
+        log_to_file(f"Tool registered: {name}", "REGISTRY")
+    
+    def get_tool(self, name: str) -> Optional[Callable]:
+        """Get a tool by name"""
+        return self.tools.get(name)
+    
+    def get_schemas(self) -> List[Dict]:
+        """Get all tool schemas for AI model"""
+        return self.schemas
+    
+    def execute(self, tool_name: str, arguments: Dict) -> str:
+        """Execute a tool with given arguments"""
+        tool = self.get_tool(tool_name)
+        if not tool:
+            return f"Error: Tool '{tool_name}' not found"
+        
+        try:
+            result = tool(**arguments)
+            log_tool_call(tool_name, arguments, str(result)[:200])
+            return result
+        except Exception as e:
+            error_msg = f"Error executing {tool_name}: {str(e)}"
+            log_tool_call(tool_name, arguments, f"ERROR: {error_msg}")
+            return error_msg
+
+# Global registry
+registry = ToolRegistry()
+
+# ============================================================================
+# TOOL IMPLEMENTATIONS
+# ============================================================================
+
+def run_command(command: str, timeout: int = 60, cwd: str = None) -> str:
+    """Execute a shell command and return output"""
+    try:
+        result = subprocess.run(
+            command,
+            shell=True,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            cwd=cwd or REPO_DIR
+        )
+        output = result.stdout
+        if result.stderr:
+            output += "\n[STDERR]\n" + result.stderr
+        return output or "Command executed successfully (no output)"
+    except subprocess.TimeoutExpired:
+        return f"Error: Command timed out after {timeout} seconds"
+    except Exception as e:
+        return f"Error: {str(e)}"
+
+# Tool: execute_shell
+def tool_execute_shell(command: str, timeout: int = 60) -> str:
+    """Execute a shell command on the system."""
+    return run_command(command, timeout)
+
+registry.register(
+    "execute_shell",
+    "Execute a shell command on the system. Returns command output.",
+    {
+        "type": "object",
+        "properties": {
+            "command": {"type": "string", "description": "The shell command to execute"},
+            "timeout": {"type": "integer", "description": "Timeout in seconds (default: 60)"}
+        },
+        "required": ["command"]
+    },
+    tool_execute_shell
+)
+
+# Tool: read_file
+def tool_read_file(file_path: str, max_lines: int = 1000) -> str:
+    """Read contents of a file."""
+    full_path = os.path.join(REPO_DIR, file_path) if not os.path.isabs(file_path) else file_path
+    
+    if not os.path.exists(full_path):
+        return f"Error: File not found: {file_path}"
+    
+    if not os.path.isfile(full_path):
+        return f"Error: Path is not a file: {file_path}"
+    
+    try:
+        with open(full_path, 'r', encoding='utf-8') as f:
+            lines = f.readlines()
+        
+        content = ''.join(lines[:max_lines])
+        if len(lines) > max_lines:
+            content += f"\n... (truncated, {len(lines) - max_lines} more lines)"
+        
+        return f"File: {file_path}\n{'=' * 40}\n{content}"
+    except Exception as e:
+        return f"Error reading file: {str(e)}"
+
+registry.register(
+    "read_file",
+    "Read the contents of a file. Returns file contents or error.",
+    {
+        "type": "object",
+        "properties": {
+            "file_path": {"type": "string", "description": "Path to the file to read"},
+            "max_lines": {"type": "integer", "description": "Maximum lines to read", "default": 1000}
+        },
+        "required": ["file_path"]
+    },
+    tool_read_file
+)
+
+# Tool: write_file
+def tool_write_file(file_path: str, content: str, append: bool = False) -> str:
+    """Write content to a file."""
+    full_path = os.path.join(REPO_DIR, file_path) if not os.path.isabs(file_path) else file_path
+    
+    if not full_path.startswith(REPO_DIR):
+        return f"Error: Cannot write outside repository directory"
+    
+    try:
+        os.makedirs(os.path.dirname(full_path), exist_ok=True)
+        mode = 'a' if append else 'w'
+        
+        with open(full_path, mode, encoding='utf-8') as f:
+            f.write(content)
+        
+        action = "Appended to" if append else "Written to"
+        return f"Success: {action} {file_path}"
+    except Exception as e:
+        return f"Error writing file: {str(e)}"
+
+registry.register(
+    "write_file",
+    "Write content to a file. Creates file if needed.",
+    {
+        "type": "object",
+        "properties": {
+            "file_path": {"type": "string", "description": "Path to the file to write"},
+            "content": {"type": "string", "description": "Content to write"},
+            "append": {"type": "boolean", "description": "Append to file", "default": False}
+        },
+        "required": ["file_path", "content"]
+    },
+    tool_write_file
+)
+
+# Tool: delete_file
+def tool_delete_file(file_path: str) -> str:
+    """Delete a file from the system."""
+    full_path = os.path.join(REPO_DIR, file_path) if not os.path.isabs(file_path) else file_path
+    
+    if not full_path.startswith(REPO_DIR):
+        return f"Error: Cannot delete files outside repository"
+    
+    if not os.path.exists(full_path):
+        return f"Error: File not found: {file_path}"
+    
+    try:
+        os.remove(full_path)
+        return f"Success: Deleted {file_path}"
+    except Exception as e:
+        return f"Error deleting file: {str(e)}"
+
+registry.register(
+    "delete_file",
+    "Delete a file from the system.",
+    {
+        "type": "object",
+        "properties": {
+            "file_path": {"type": "string", "description": "Path to the file to delete"}
+        },
+        "required": ["file_path"]
+    },
+    tool_delete_file
+)
+
+# Tool: list_directory
+def tool_list_directory(directory: str = ".", include_hidden: bool = False) -> str:
+    """List contents of a directory."""
+    full_path = os.path.join(REPO_DIR, directory) if not os.path.isabs(directory) else directory
+    
+    if not os.path.exists(full_path):
+        return f"Error: Directory not found: {directory}"
+    
+    if not os.path.isdir(full_path):
+        return f"Error: Path is not a directory: {directory}"
+    
+    try:
+        items = os.listdir(full_path)
+        if not include_hidden:
+            items = [i for i in items if not i.startswith('.')]
+        
+        items.sort()
+        output = f"Directory: {directory}\n{'=' * 40}\n"
+        
+        for item in items:
+            full_item_path = os.path.join(full_path, item)
+            if os.path.isdir(full_item_path):
+                output += f"📁 {item}/\n"
+            else:
+                size = os.path.getsize(full_item_path)
+                output += f"📄 {item} ({size} bytes)\n"
+        
+        return output
+    except Exception as e:
+        return f"Error listing directory: {str(e)}"
+
+registry.register(
+    "list_directory",
+    "List contents of a directory.",
+    {
+        "type": "object",
+        "properties": {
+            "directory": {"type": "string", "description": "Directory path", "default": "."},
+            "include_hidden": {"type": "boolean", "description": "Include hidden files", "default": False}
+        },
+        "required": []
+    },
+    tool_list_directory
+)
+
+# Tool: search_files
+def tool_search_files(pattern: str, directory: str = ".", file_type: str = "") -> str:
+    """Search for files matching a pattern."""
+    full_path = os.path.join(REPO_DIR, directory) if not os.path.isabs(directory) else directory
+    
+    if not os.path.exists(full_path):
+        return f"Error: Directory not found: {directory}"
+    
+    try:
+        matches = []
+        for root, dirs, files in os.walk(full_path):
+            dirs[:] = [d for d in dirs if not d.startswith('.') and d not in ['node_modules', '__pycache__', '.git']]
+            
+            for file in files:
+                if pattern.lower() in file.lower() and (not file_type or file.endswith(f'.{file_type}')):
+                    matches.append(os.path.join(root, file).replace(REPO_DIR + '/', ''))
+        
+        if matches:
+            return f"Found {len(matches)} matches:\n" + "\n".join(f"• {m}" for m in matches[:50])
+        return f"No files found matching '{pattern}'"
+    except Exception as e:
+        return f"Error searching files: {str(e)}"
+
+registry.register(
+    "search_files",
+    "Search for files matching a pattern.",
+    {
+        "type": "object",
+        "properties": {
+            "pattern": {"type": "string", "description": "Pattern to search"},
+            "directory": {"type": "string", "description": "Directory to search", "default": "."},
+            "file_type": {"type": "string", "description": "File extension filter", "default": ""}
+        },
+        "required": ["pattern"]
+    },
+    tool_search_files
+)
+
+# Tool: github_list_repos
+def tool_github_list_repos() -> str:
+    """List repositories for the authenticated GitHub user."""
+    if not GITHUB_TOKEN:
+        return "Error: GitHub token not configured. Set GH_TOKEN environment variable."
+    
+    try:
+        import requests
+        headers = {
+            "Authorization": f"token {GITHUB_TOKEN}",
+            "Accept": "application/vnd.github.v3+json"
+        }
+        
+        response = requests.get("https://api.github.com/user/repos", headers=headers, params={"per_page": 30})
+        
+        if response.status_code != 200:
+            return f"Error: GitHub API returned {response.status_code}"
+        
+        repos = response.json()
+        if not repos:
+            return "No repositories found"
+        
+        output = "Your GitHub Repositories:\n" + "=" * 40 + "\n"
+        for repo in repos:
+            output += f"📦 {repo['full_name']}\n   {repo.get('description', 'No description')}\n   ⭐ {repo.get('stargazers_count', 0)} | 🔀 {repo.get('forks_count', 0)}\n\n"
+        
+        return output
+    except Exception as e:
+        return f"Error accessing GitHub: {str(e)}"
+
+registry.register(
+    "github_list_repos",
+    "List repositories for the authenticated GitHub user.",
+    {
+        "type": "object",
+        "properties": {}
+    },
+    tool_github_list_repos
+)
+
+# Tool: github_create_file
+def tool_github_create_file(repo: str, path: str, content: str, message: str, branch: str = "main") -> str:
+    """Create or update a file in a GitHub repository."""
+    if not GITHUB_TOKEN:
+        return "Error: GitHub token not configured. Set GH_TOKEN environment variable."
+    
+    try:
+        import requests
+        import base64
+        headers = {
+            "Authorization": f"token {GITHUB_TOKEN}",
+            "Accept": "application/vnd.github.v3+json"
+        }
+        
+        existing_url = f"https://api.github.com/repos/{repo}/contents/{path}"
+        existing = requests.get(existing_url, headers=headers, params={"ref": branch})
+        
+        sha = None
+        if existing.status_code == 200:
+            sha = existing.json().get('sha')
+            message = f"Update: {message}" if message else "Update file via Gamma Agent"
+        else:
+            message = f"Create: {message}" if message else "Create file via Gamma Agent"
+        
+        encoded_content = base64.b64encode(content.encode()).decode()
+        
+        data = {
+            "message": message,
+            "content": encoded_content,
+            "branch": branch
+        }
+        if sha:
+            data["sha"] = sha
+        
+        response = requests.put(existing_url, headers=headers, json=data)
+        
+        if response.status_code in [200, 201]:
+            result = response.json()
+            return f"Success: File {'updated' if sha else 'created'} at {result['content']['path']}\nURL: {result['content']['html_url']}"
+        else:
+            return f"Error: GitHub API returned {response.status_code}: {response.text}"
+    except Exception as e:
+        return f"Error: {str(e)}"
+
+registry.register(
+    "github_create_file",
+    "Create or update a file in a GitHub repository.",
+    {
+        "type": "object",
+        "properties": {
+            "repo": {"type": "string", "description": "Repository (owner/repo)"},
+            "path": {"type": "string", "description": "Path in repository"},
+            "content": {"type": "string", "description": "File content"},
+            "message": {"type": "string", "description": "Commit message"},
+            "branch": {"type": "string", "description": "Branch name", "default": "main"}
+        },
+        "required": ["repo", "path", "content", "message"]
+    },
+    tool_github_create_file
+)
+
+# Tool: github_run_workflow
+def tool_github_run_workflow(repo: str, workflow_id: str, inputs: Dict = None) -> str:
+    """Trigger a GitHub Actions workflow dispatch."""
+    if not GITHUB_TOKEN:
+        return "Error: GitHub token not configured."
+    
+    try:
+        import requests
+        headers = {
+            "Authorization": f"token {GITHUB_TOKEN}",
+            "Accept": "application/vnd.github.v3+json",
+            "Content-Type": "application/json"
+        }
+        
+        data = {"ref": "main"}
+        if inputs:
+            data["inputs"] = inputs
+        
+        url = f"https://api.github.com/repos/{repo}/actions/workflows/{workflow_id}/dispatches"
+        response = requests.post(url, headers=headers, json=data)
+        
+        if response.status_code == 204:
+            return f"Success: Workflow '{workflow_id}' triggered"
+        else:
+            return f"Error: {response.status_code}: {response.text}"
+    except Exception as e:
+        return f"Error: {str(e)}"
+
+registry.register(
+    "github_run_workflow",
+    "Trigger a GitHub Actions workflow dispatch.",
+    {
+        "type": "object",
+        "properties": {
+            "repo": {"type": "string", "description": "Repository (owner/repo)"},
+            "workflow_id": {"type": "string", "description": "Workflow filename or ID"},
+            "inputs": {"type": "object", "description": "Workflow inputs", "default": {}}
+        },
+        "required": ["repo", "workflow_id"]
+    },
+    tool_github_run_workflow
+)
+
+# Tool: get_system_info
+def tool_get_system_info() -> str:
+    """Get current system information."""
+    try:
+        output = f"""System Information:
+{'=' * 40}
+Repository: {REPO_DIR}
+Current Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+
+Git Status:
+"""
+        output += run_command("git status --short 2>/dev/null || echo 'Not a git repository'")
+        output += f"\nGit Branch:\n"
+        output += run_command("git branch --show-current 2>/dev/null || echo 'N/A'")
+        output += f"\nDisk Usage:\n"
+        output += run_command(f"du -sh {REPO_DIR} 2>/dev/null || echo 'N/A'")
+        return output
+    except Exception as e:
+        return f"Error getting system info: {str(e)}"
+
+registry.register(
+    "get_system_info",
+    "Get current system information.",
+    {
+        "type": "object",
+        "properties": {}
+    },
+    tool_get_system_info
+)
+
+# Tool: search_web
+def tool_search_web(query: str, max_results: int = 5) -> str:
+    """Search the web for information."""
+    try:
+        encoded_query = urllib.parse.quote(query)
+        url = f"https://api.duckduckgo.com/?q={encoded_query}&format=json&no_html=1"
+        
+        req = urllib.request.Request(url, headers={'User-Agent': 'GammaAgent/4.0'})
+        with urllib.request.urlopen(req, timeout=10) as response:
+            data = json.loads(response.read().decode('utf-8'))
+        
+        results = []
+        if data.get('RelatedTopics'):
+            for item in data['RelatedTopics'][:max_results]:
+                if 'Text' in item:
+                    results.append(f"• {item['Text'][:300]}")
+        
+        if results:
+            return f"Web search results for '{query}':\n\n" + "\n".join(results)
+        return f"No results found for '{query}'"
+    except Exception as e:
+        return f"Web search error: {str(e)}"
+
+registry.register(
+    "search_web",
+    "Search the web for information.",
+    {
+        "type": "object",
+        "properties": {
+            "query": {"type": "string", "description": "Search query"},
+            "max_results": {"type": "integer", "description": "Max results", "default": 5}
+        },
+        "required": ["query"]
+    },
+    tool_search_web
+)
+
+# Tool: analyze_and_execute
+def tool_analyze_and_execute(task: str) -> str:
+    """Analyze a natural language task and execute appropriate commands."""
+    task_lower = task.lower()
+    results = []
+    
+    # Check for multiple commands
+    commands_to_run = []
+    
+    if "git" in task_lower and "status" in task_lower:
+        commands_to_run.append(("Git Status", "git status"))
+    if "git" in task_lower and "log" in task_lower:
+        commands_to_run.append(("Git Log", "git log --oneline -10"))
+    if "git" in task_lower and "branch" in task_lower:
+        commands_to_run.append(("Git Branch", "git branch -a"))
+    if "git" in task_lower and "diff" in task_lower:
+        commands_to_run.append(("Git Diff", "git diff --stat"))
+    
+    # Check for directory listing
+    if "list" in task_lower and ("file" in task_lower or "directory" in task_lower or "folder" in task_lower or "current" in task_lower or "dir" in task_lower):
+        path = "."
+        for word in task.split():
+            if word.startswith("/") or ("." in word and len(word) > 2):
+                path = word
+                break
+        commands_to_run.append(("Directory Listing", f"ls -la {path}"))
+    
+    # Check for archive directory
+    if "archive" in task_lower:
+        commands_to_run.append(("Archive Contents", f"ls -la {os.path.join(REPO_DIR, 'archive')}"))
+    
+    # Check for commands directory
+    if "command" in task_lower and "dir" in task_lower:
+        commands_to_run.append(("Commands Contents", f"ls -la {os.path.join(REPO_DIR, 'commands')}"))
+    
+    # Check for find/search
+    if "find" in task_lower or ("search" in task_lower and "file" in task_lower):
+        pattern = ""
+        for word in task.split():
+            if len(word) > 3 and not word.lower() in ['find', 'search', 'for', 'in', 'the', 'and', 'file', 'files']:
+                pattern = word
+                break
+        if pattern:
+            commands_to_run.append(("Search Files", f"find . -name '*{pattern}*' 2>/dev/null | head -20"))
+    
+    # Check for process listing
+    if "process" in task_lower or ("running" in task_lower and "task" not in task_lower):
+        commands_to_run.append(("Running Processes", "ps aux | head -15"))
+    
+    # Check for disk usage
+    if "disk" in task_lower or "space" in task_lower:
+        commands_to_run.append(("Disk Usage", "df -h"))
+    
+    # Check for memory info
+    if "memory" in task_lower or "ram" in task_lower:
+        commands_to_run.append(("Memory Info", "free -h"))
+    
+    # Check for system info
+    if "system" in task_lower or "info" in task_lower or "about" in task_lower:
+        commands_to_run.append(("System Info", "uname -a && echo '---' && cat /etc/os-release 2>/dev/null | head -5"))
+    
+    # If no specific commands matched, use basic execution based on keywords
+    if not commands_to_run:
+        # Default behavior: list current directory
+        commands_to_run.append(("Directory Listing", "ls -la"))
+    
+    # Execute all matched commands
+    for desc, cmd in commands_to_run:
+        results.append(f"### {desc}")
+        results.append(f"$ {cmd}")
+        results.append(run_command(cmd))
+        results.append("")
+    
+    return "\n".join(results)
+
+registry.register(
+    "analyze_and_execute",
+    "Analyze a natural language task and execute commands.",
+    {
+        "type": "object",
+        "properties": {
+            "task": {"type": "string", "description": "Task description"}
+        },
+        "required": ["task"]
+    },
+    tool_analyze_and_execute
+)
+
+# ============================================================================
+# GEMINI AI INTEGRATION
+# ============================================================================
+
+def get_gemini_model():
+    """Get Google Gemini model with tool support"""
+    if not GEMINI_API_KEY:
+        return None
+    
+    try:
+        import google.generativeai as genai
+        genai.configure(api_key=GEMINI_API_KEY)
+        
+        model = genai.GenerativeModel(
+            model_name='gemini-1.5-flash',
+            tools=registry.get_schemas()
+        )
+        return model
+    except Exception as e:
+        log_to_file(f"Gemini initialization error: {e}", "ERROR")
+        return None
+
+def execute_with_gemini(task: str, max_iterations: int = 10) -> str:
+    """Execute task using Gemini with tool calling"""
+    model = get_gemini_model()
+    
+    if not model:
+        log_action("GEMINI_UNAVAILABLE", task, "Falling back to analyze_and_execute")
+        return tool_analyze_and_execute(task)
+    
+    try:
+        import google.generativeai as genai
+        
+        chat = model.start_chat(enable_automatic_function_calling=True)
+        
+        prompt = f"""You are Gamma Agent, an autonomous execution agent.
+You have access to these tools:
+{json.dumps(registry.get_schemas(), indent=2)}
+
+Task: {task}
+
+Execute this task using the available tools."""
+        
+        response = chat.send_message(prompt)
+        all_results = []
+        iteration = 0
+        
+        while iteration < max_iterations:
+            iteration += 1
+            
+            if hasattr(response, 'function_calls') and response.function_calls:
+                for call in response.function_calls:
+                    tool_name = call.name
+                    tool_args = {k: v for k, v in call.args.items()}
+                    
+                    log_action("TOOL_CALL", f"{tool_name}({tool_args})", "EXECUTING")
+                    result = registry.execute(tool_name, tool_args)
+                    all_results.append(f"[{tool_name}] {result}")
+                    
+                    response = chat.send_message(
+                        genai.protos.Content(
+                            parts=[genai.protos.Part(
+                                function_response=genai.protos.FunctionResponse(
+                                    name=tool_name,
+                                    response={'result': result}
+                                )
+                            )]
+                        )
+                    )
+            else:
+                text = response.text if hasattr(response, 'text') else str(response)
+                all_results.append(f"[RESULT] {text}")
+                break
+        
+        output = "\n".join(all_results)
+        log_action("TASK_COMPLETED", task, f"Completed in {iteration} iterations")
+        return output
+        
+    except Exception as e:
+        error_msg = f"Gemini execution error: {str(e)}"
+        log_to_file(error_msg, "ERROR")
+        return tool_analyze_and_execute(task)
+
+# ============================================================================
+# AUTONOMOUS COMMAND FILE EXECUTOR
+# ============================================================================
+
+class CommandFileWatcher:
+    """Watches commands/ directory for .txt files and executes them"""
+    
+    def __init__(self):
+        self.processed_files = set()
+        self.running = False
+        self.thread = None
+        self.last_check = {}
+    
+    def scan_commands(self):
+        """Scan for new command files"""
+        if not os.path.exists(COMMANDS_DIR):
+            return []
+        
+        new_commands = []
+        for filename in os.listdir(COMMANDS_DIR):
+            if filename.endswith('.txt') and filename not in self.processed_files:
+                filepath = os.path.join(COMMANDS_DIR, filename)
+                mtime = os.path.getmtime(filepath)
+                
+                if filename not in self.last_check or self.last_check[filename] != mtime:
+                    self.last_check[filename] = mtime
+                    new_commands.append((filename, filepath))
+        
+        return new_commands
+    
+    def execute_command_file(self, filename: str, filepath: str) -> str:
+        """Execute commands from a file"""
+        log_action("AUTO_EXEC", f"Reading {filename}", "STARTED")
+        
+        try:
+            with open(filepath, 'r') as f:
+                commands = f.read().strip()
+            
+            if not commands:
+                return "File is empty"
+            
+            task_id = hashlib.md5(f"{filename}{time.time()}".encode()).hexdigest()[:8]
+            result = execute_with_gemini(commands)
+            output_file = save_task_output(task_id, result)
+            
+            self.processed_files.add(filename)
+            
+            log_action("AUTO_EXEC", f"Completed {filename}", f"Output: {output_file}")
+            
+            return f"Executed: {filename}\nOutput saved to: {output_file}\n\n{result}"
+            
+        except Exception as e:
+            error_msg = f"Error executing {filename}: {str(e)}"
+            log_to_file(error_msg, "ERROR")
+            return error_msg
+    
+    def start_watching(self):
+        """Start watching for command files"""
+        self.running = True
+        log_action("WATCHER_STARTED", "Autonomous command watcher started", "ACTIVE")
+        
+        while self.running:
+            try:
+                new_commands = self.scan_commands()
+                for filename, filepath in new_commands:
+                    result = self.execute_command_file(filename, filepath)
+                    print(f"\n{'=' * 60}")
+                    print(f"AUTONOMOUS EXECUTION: {filename}")
+                    print(f"{'=' * 60}")
+                    print(result)
+                    print(f"{'=' * 60}\n")
+                
+                time.sleep(5)
+            except Exception as e:
+                log_to_file(f"Watcher error: {e}", "ERROR")
+                time.sleep(10)
+    
+    def start_background(self):
+        """Start watching in background thread"""
+        if self.thread and self.thread.is_alive():
+            return
+        
+        self.thread = threading.Thread(target=self.start_watching, daemon=True)
+        self.thread.start()
+        log_to_file("Command file watcher started in background", "SYSTEM")
+    
+    def stop_watching(self):
+        """Stop watching"""
+        self.running = False
+        log_to_file("Command file watcher stopped", "SYSTEM")
+
+# Global watcher instance
+command_watcher = CommandFileWatcher()
+
+# ============================================================================
+# EVENT SYSTEM
+# ============================================================================
+
+def emit_event(event_type: str, data: Dict):
     """Emit an event to SSE clients"""
-    event = json.dumps({
-        'type': event_type,
-        'timestamp': datetime.now().isoformat(),
-        **data
-    })
     with open(EVENTS_FILE, 'a') as f:
         f.write(json.dumps({
             'type': event_type,
@@ -58,838 +882,30 @@ def emit_event(event_type, data):
         }) + '\n')
     print(f"📡 EMIT: {event_type} -> {data}")
 
-def log(msg):
+def log(msg: str):
     """Print to console with timestamp"""
     print(f"[{datetime.now().strftime('%H:%M:%S')}] {msg}")
 
-def search_wikipedia(query):
-    """Search Wikipedia for information"""
-    try:
-        encoded_query = urllib.parse.quote(query)
-        url = f"https://en.wikipedia.org/w/api.php?action=opensearch&search={encoded_query}&limit=5&format=json"
-        
-        req = urllib.request.Request(url, headers={'User-Agent': 'GammaAgent/3.0'})
-        with urllib.request.urlopen(req, timeout=10) as response:
-            data = json.loads(response.read().decode('utf-8'))
-            
-        if len(data) >= 2 and len(data[1]) > 0:
-            results = []
-            for i, title in enumerate(data[1][:3]):
-                results.append(f"{i+1}. {title}")
-            return "Wikipedia results:\n" + "\n".join(results) + "\n\nUse the title above to get more details."
-        return "No Wikipedia results found."
-    except Exception as e:
-        return f"Wikipedia search error: {str(e)}"
-
-def get_wikipedia_article(title):
-    """Get a Wikipedia article summary"""
-    try:
-        encoded_title = urllib.parse.quote(title)
-        url = f"https://en.wikipedia.org/api/rest_v1/page/summary/{encoded_title}"
-        
-        req = urllib.request.Request(url, headers={'User-Agent': 'GammaAgent/3.0'})
-        with urllib.request.urlopen(req, timeout=10) as response:
-            data = json.loads(response.read().decode('utf-8'))
-            
-        if 'extract' in data:
-            return f"""📖 {data.get('title', title)}
-
-{data.get('extract', 'No content available')}
-
-🔗 Source: {data.get('content_urls', {}).get('desktop', {}).get('page', 'N/A')}"""
-        return "Article not found."
-    except Exception as e:
-        return f"Error retrieving article: {str(e)}"
-
-def search_web(query):
-    """Search the web using Wikipedia API"""
-    try:
-        encoded_query = urllib.parse.quote(query)
-        # Use DuckDuckGo API
-        url = f"https://api.duckduckgo.com/?q={encoded_query}&format=json&no_html=1"
-        
-        req = urllib.request.Request(url, headers={'User-Agent': 'GammaAgent/1.0'})
-        with urllib.request.urlopen(req, timeout=10) as response:
-            data = json.loads(response.read().decode('utf-8'))
-        
-        results = []
-        if data.get('RelatedTopics'):
-            for item in data['RelatedTopics'][:5]:
-                if 'Text' in item:
-                    results.append(f"• {item['Text'][:200]}")
-        
-        if results:
-            return "Web search results:\n\n" + "\n".join(results)
-        return "No results found."
-    except Exception as e:
-        return f"Web search error: {str(e)}"
-
-def answer_question(question):
-    """Answer a question using available knowledge"""
-    question_lower = question.lower()
-    
-    # Israeli Prime Ministers
-    if 'prime minister' in question_lower and 'israel' in question_lower:
-        return """🇮🇱 ראשי ממשלת ישראל (chronologically):
-
-1. דוד בן-גוריון (1948-1953, 1955-1963)
-2. משה שרת (1953-1955)
-3. לוי אשכול (1963-1969)
-4. גולדה מאיר (1969-1974)
-5. יצחק רבין (1974-1977, 1992-1995)
-6. מנחם בגין (1977-1983)
-7. שמעון פרס (1984-1986, 1995-1996)
-8. יצחק שמיר (1983-1984, 1986-1992)
-9. אהוד ברק (1999-2001)
-10. אריאל שרון (2001-2006)
-11. אהוד אולמרט (2006-2009)
-12. בנימין נתניהו (2009-2021, 2022-הווה)
-13. נפתלי בנט (2021-2022)
-14. יאיר לפיד (2022, ממלא מקום)
-
-🔗 Source: Wikipedia"""
-    
-    # General Israeli history
-    if 'israel' in question_lower and ('history' in question_lower or 'שאלה' in question_lower or 'מדינה' in question_lower):
-        return """🇮🇱 מדינת ישראל - עובדות עיקריות:
-
-📅 הכרזה: 14 במאי 1948
-👤 ראש המדינה הראשון: חיים ויצמן
-🎯 הצהרת העצמאות: "מקימים בארץ ישראל בית לעם היהודי"
-
-🏛️ מוסדות:
-• הכנסת - 120 חברים
-• ממשלה ראשונה בראשות דוד בן-גוריון
-• בית המשפט העליון
-
-🌍 שכנים:
-• לבנון, סוריה, ירדן, מצרים (גבולות 1949)
-• פלסטין (רצועת עזה, יהודה ושומרון)
-
-📊 אוכלוסייה: כ-9 מיליון תושבים (2024)
-💰 מטבע: שקל ישראלי (₪)
-
-🔗 Source: Wikipedia & Central Bureau of Statistics"""
-    
-    # World leaders
-    if 'president' in question_lower and 'usa' in question_lower:
-        return """🇺🇸 נשיאי ארה"ב (chronologically):
-
-1. ג'ורג' וושינגטון (1789-1797)
-2. ג'ון אדמס (1797-1801)
-3. תומס ג'פרסון (1801-1809)
-4. ג'יימס מדיסון (1809-1817)
-5. ג'יימס מונרו (1817-1825)
-6. ג'ון קווינסי אדמס (1825-1829)
-7. אנדרו ג'קסון (1829-1837)
-8. מרטין ואן ביורן (1837-1841)
-9. ויליאם הנרי האריסון (1841)
-10. ג'ון טיילר (1841-1845)
-11. ג'יימס ק. פולק (1845-1849)
-12. זכריה טיילור (1849-1850)
-13. מילרד פילמור (1850-1853)
-14. פרנקלין פירס (1853-1857)
-15. ג'יימס ביוקנן (1857-1861)
-16. אברהם לינקולן (1861-1865)
-17. אנדרו ג'ונסון (1865-1869)
-18. יוליסס ס. גרנט (1869-1877)
-19. רתרפורד ב. הייס (1877-1881)
-20. ג'יימס גרבל (1881, 1885-1889)
-21. צ'סטר א. ארתור (1881-1885)
-22. גרובר קליבלנד (1893-1897, 1897-1901)
-23. ויליאם מקינלי (1897-1901)
-24. תאודור רוזוולט (1901-1909)
-25. ויליאם הווארד טאפט (1909-1913)
-26. וודרו וילסון (1913-1921)
-27. וורן ג. הרדינג (1921-1923)
-28. קלווין קולידג' (1923-1929)
-29. הרברט הובר (1929-1933)
-30. פרנקלין ד. רוזוולט (1933-1945)
-31. הארי טרומן (1945-1953)
-32. דווייט ד. אייזנהאואר (1953-1961)
-33. ג'ון פ. קנדי (1961-1963)
-34. לינדון ב. ג'ונסון (1963-1969)
-35. ריצ'רד ניקסון (1969-1974)
-36. ג'רלד פורד (1974-1977)
-37. ג'ימי קרטר (1977-1981)
-38. רונלד רייגן (1981-1989)
-39. ג'ורג' ה.וו. בוש (1989-1993)
-40. ביל קלינטון (1993-2001)
-41. ג'ורג' וו. בוש (2001-2009)
-42. ברק אובמה (2009-2017)
-43. דונלד  טראמפ (2017-2021)
-44. ג'ו ביידן (2021-הווה)
-
-🔗 Source: Wikipedia"""
-    
-    # Math operations
-    if any(op in question_lower for op in ['calculate', 'math', 'חשב', 'פלוס', 'מינוס', 'כפל', 'חלק']):
-        return "🧮 למערכת הזו יש מחשבון! נסה: 'what is 2+2' או '100 * 5'"
-    
-    # Current time/date
-    if any(word in question_lower for word in ['time', 'date', 'זמן', 'תאריך']):
-        now = datetime.now()
-        return f"🕐 עכשיו: {now.strftime('%H:%M:%S')}\n📅 התאריך: {now.strftime('%Y-%m-%d')}\n📍 יום: {now.strftime('%A')}"
-    
-    # About Gamma
-    if 'who are you' in question_lower or 'מי אתה' in question_lower or 'מי זה' in question_lower:
-        return """🤖 אני Gamma Agent - סוכן אוטונומי!
-
-יכולותיי:
-• 🌍 חיפוש מידע באינטרנט
-• 📚 חיפוש בויקיפדיה  
-• 📊 ביצוע משימות טכניות
-• 💬 ענות על שאלות
-
-פשוט שאל אותי כל דבר!"""
-    
-    # Default - search web
-    return search_web(question)
-
-def execute_process_task(task):
-    """Execute process-related tasks"""
-    emit_event('step_update', {
-        'step': 2,
-        'details': '📊 Counting running processes...'
-    })
-    
-    # Count processes
-    ps_output = run_command("ps aux 2>/dev/null || ps -ef 2>/dev/null")
-    lines = [l for l in ps_output.split('\n') if l.strip()]
-    total_processes = len(lines) - 1  # Minus header
-    
-    # Top processes by CPU
-    cpu_top = run_command("ps aux --sort=-%cpu 2>/dev/null | head -6")
-    
-    # Top processes by memory
-    mem_top = run_command("ps aux --sort=-%mem 2>/dev/null | head -6")
-    
-    # Process count by user
-    user_count = run_command("ps aux 2>/dev/null | awk 'NR>1 {print $1}' | sort | uniq -c | sort -rn | head -5")
-    
-    report = f"""╔══════════════════════════════════════════════════════════════════════════════╗
-║                    PROCESS ANALYSIS REPORT                                      ║
-╠══════════════════════════════════════════════════════════════════════════════╣
-║  Task: {task[:70]:<68}║
-║  Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S'):<56}║
-╠══════════════════════════════════════════════════════════════════════════════╣
-
-📊 PROCESS STATISTICS
-═════════════════════
-  Total Running Processes: {total_processes}
-  System Status: OPERATIONAL
-
-🔝 TOP 5 PROCESSES BY CPU USAGE
-──────────────────────────────────
-{cpu_top if cpu_top else 'N/A'}
-
-🔝 TOP 5 PROCESSES BY MEMORY USAGE
-───────────────────────────────────
-{mem_top if mem_top else 'N/A'}
-
-👥 PROCESSES BY USER (Top 5)
-─────────────────────────────
-{user_count if user_count else 'N/A'}
-
-╚══════════════════════════════════════════════════════════════════════════════╝"""
-    
-    return write_report(report)
-
-def execute_memory_task(task):
-    """Execute memory-related tasks"""
-    emit_event('step_update', {
-        'step': 2,
-        'details': '📊 Analyzing memory usage...'
-    })
-    
-    # Memory info
-    mem_info = run_command("free -h 2>/dev/null || cat /proc/meminfo 2>/dev/null | head -20")
-    
-    # Memory details
-    mem_details = run_command("cat /proc/meminfo 2>/dev/null | head -15")
-    
-    # Top memory consumers
-    mem_procs = run_command("ps aux --sort=-%mem 2>/dev/null | head -8")
-    
-    report = f"""╔══════════════════════════════════════════════════════════════════════════════╗
-║                    MEMORY ANALYSIS REPORT                                       ║
-╠══════════════════════════════════════════════════════════════════════════════╣
-║  Task: {task[:70]:<68}║
-║  Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S'):<56}║
-╠══════════════════════════════════════════════════════════════════════════════╣
-
-💾 MEMORY OVERVIEW
-═══════════════════
-{mem_info if mem_info else 'Memory information not available'}
-
-📋 DETAILED MEMORY STATUS
-═════════════════════════
-{mem_details if mem_details else 'N/A'}
-
-🔝 TOP MEMORY CONSUMERS
-───────────────────────
-{mem_procs if mem_procs else 'N/A'}
-
-╚══════════════════════════════════════════════════════════════════════════════╝"""
-    
-    return write_report(report)
-
-def execute_disk_task(task):
-    """Execute disk-related tasks"""
-    emit_event('step_update', {
-        'step': 2,
-        'details': '📊 Analyzing disk usage...'
-    })
-    
-    # Disk usage
-    df_output = run_command("df -h 2>/dev/null")
-    
-    # Disk inodes
-    df_inodes = run_command("df -i 2>/dev/null")
-    
-    # Largest directories
-    du_output = run_command("du -sh /* 2>/dev/null | sort -rh | head -10")
-    
-    report = f"""╔══════════════════════════════════════════════════════════════════════════════╗
-║                    DISK ANALYSIS REPORT                                        ║
-╠══════════════════════════════════════════════════════════════════════════════╣
-║  Task: {task[:70]:<68}║
-║  Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S'):<56}║
-╠══════════════════════════════════════════════════════════════════════════════╣
-
-💿 DISK USAGE
-═════════════
-{df_output if df_output else 'Disk information not available'}
-
-📊 INODE USAGE
-══════════════
-{df_inodes if df_inodes else 'N/A'}
-
-📁 LARGEST DIRECTORIES (Top 10)
-────────────────────────────────
-{du_output if du_output else 'N/A'}
-
-╚══════════════════════════════════════════════════════════════════════════════╝"""
-    
-    return write_report(report)
-
-def execute_network_task(task):
-    """Execute network-related tasks"""
-    emit_event('step_update', {
-        'step': 2,
-        'details': '📊 Analyzing network connections...'
-    })
-    
-    # Network interfaces
-    net_interfaces = run_command("ip addr 2>/dev/null || ifconfig 2>/dev/null")
-    
-    # Active connections
-    netstat = run_command("ss -tunap 2>/dev/null | head -20 || netstat -tunap 2>/dev/null | head -20")
-    
-    # Connection summary
-    conn_summary = run_command("ss -s 2>/dev/null || netstat -s 2>/dev/null | head -10")
-    
-    report = f"""╔══════════════════════════════════════════════════════════════════════════════╗
-║                    NETWORK ANALYSIS REPORT                                      ║
-╠══════════════════════════════════════════════════════════════════════════════╣
-║  Task: {task[:70]:<68}║
-║  Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S'):<56}║
-╠══════════════════════════════════════════════════════════════════════════════╣
-
-🌐 NETWORK INTERFACES
-═════════════════════
-{net_interfaces if net_interfaces else 'Network interfaces not available'}
-
-🔗 ACTIVE CONNECTIONS (Top 20)
-────────────────────────────────
-{netstat if netstat else 'N/A'}
-
-📈 CONNECTION SUMMARY
-═════════════════════
-{conn_summary if conn_summary else 'N/A'}
-
-╚══════════════════════════════════════════════════════════════════════════════╝"""
-    
-    return write_report(report)
-
-def execute_security_task(task):
-    """Execute security audit tasks"""
-    emit_event('step_update', {
-        'step': 2,
-        'details': '🔒 Running security audit...'
-    })
-    
-    # Open ports
-    open_ports = run_command("ss -tlnp 2>/dev/null || netstat -tlnp 2>/dev/null")
-    
-    # Failed login attempts
-    failed_logins = run_command("grep -i 'failed' /var/log/auth.log 2>/dev/null | tail -10 || lastlog 2>/dev/null | head -10")
-    
-    # Running services
-    services = run_command("systemctl list-units --type=service --state=running 2>/dev/null | head -15 || ps aux | head -15")
-    
-    # SUID files
-    suid_files = run_command("find /usr -perm -4000 2>/dev/null | head -10")
-    
-    report = f"""╔══════════════════════════════════════════════════════════════════════════════╗
-║                    SECURITY AUDIT REPORT                                        ║
-╠══════════════════════════════════════════════════════════════════════════════╣
-║  Task: {task[:70]:<68}║
-║  Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S'):<56}║
-╠══════════════════════════════════════════════════════════════════════════════╣
-
-🔓 OPEN PORTS / LISTENING SERVICES
-═════════════════════════════════
-{open_ports if open_ports else 'Port information not available'}
-
-⚠️  FAILED LOGIN ATTEMPTS (Recent 10)
-─────────────────────────────────────
-{failed_logins if failed_logins else 'No failed logins found'}
-
-🔧 RUNNING SERVICES
-═══════════════════
-{services if services else 'N/A'}
-
-🔐 SUID FILES (Security Check)
-═════════════════════════════════
-{suid_files if suid_files else 'N/A'}
-
-╚══════════════════════════════════════════════════════════════════════════════╝"""
-    
-    return write_report(report)
-
-def execute_comprehensive_task(task):
-    """Execute comprehensive system analysis - the most complex task"""
-    emit_event('step_update', {
-        'step': 2,
-        'details': '🔬 Running comprehensive system analysis...'
-    })
-    
-    # System info
-    uname = run_command("uname -a")
-    
-    # Uptime
-    uptime = run_command("uptime")
-    
-    # All previous data
-    ps_output = run_command("ps aux 2>/dev/null | wc -l")
-    mem_info = run_command("free -h 2>/dev/null")
-    df_output = run_command("df -h 2>/dev/null")
-    net_interfaces = run_command("ip addr 2>/dev/null || ifconfig 2>/dev/null")
-    open_ports = run_command("ss -tlnp 2>/dev/null | wc -l")
-    loadavg = run_command("cat /proc/loadavg 2>/dev/null")
-    cpu_info = run_command("cat /proc/cpuinfo 2>/dev/null | grep 'model name' | head -1")
-    
-    report = f"""╔══════════════════════════════════════════════════════════════════════════════╗
-║              COMPREHENSIVE SYSTEM ANALYSIS REPORT                              ║
-╠══════════════════════════════════════════════════════════════════════════════╣
-║  Task: {task[:70]:<68}║
-║  Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S'):<56}║
-╠══════════════════════════════════════════════════════════════════════════════╣
-
-🖥️  SYSTEM INFORMATION
-═══════════════════════
-  {uname if uname else 'N/A'}
-
-⏱️  UPTIME & LOAD
-═══════════════════
-  {uptime if uptime else 'N/A'}
-
-  Load Average (1/5/15 min): {loadavg if loadavg else 'N/A'}
-
-💻 CPU
-══════
-{cpu_info if cpu_info else 'N/A'}
-
-📊 PROCESS SUMMARY
-═══════════════════
-  Total Processes: {ps_output if ps_output else 'N/A'}
-
-💾 MEMORY STATUS
-═════════════════
-{mem_info if mem_info else 'N/A'}
-
-💿 DISK USAGE
-═════════════
-{df_output if df_output else 'N/A'}
-
-🌐 NETWORK INTERFACES
-═════════════════════
-{net_interfaces if net_interfaces else 'N/A'}
-
-🔓 OPEN PORTS
-═════════════
-  Listening Services: {open_ports if open_ports else 'N/A'}
-
-📈 SYSTEM HEALTH SCORE
-════════════════════════
-  ████████████████████ 100% OPERATIONAL
-
-╚══════════════════════════════════════════════════════════════════════════════╝"""
-    
-    return write_report(report)
-
-def execute_general_task(task):
-    """Execute general tasks - list active services"""
-    services = list_active_services()
-    report_content = generate_empire_report(services)
-    return write_report(report_content)
-
-def write_report(content):
-    """Write report to file"""
-    output_file = os.path.join(os.path.dirname(__file__), 'empire_report.txt')
-    try:
-        with open(output_file, 'w', encoding='utf-8') as f:
-            f.write(content)
-        return content
-    except Exception as e:
-        return f"Error writing report: {str(e)}"
-
-def execute_task_streaming(task):
-    """
-    Execute task with real-time updates to the interface.
-    Parses task and executes appropriate system commands.
-    """
-    log(f"🚀 Starting task: {task}")
-    task_lower = task.lower()
-    
-    # ========== PHASE 1: Planning ==========
-    emit_event('planning', {'status': 'in_progress', 'details': 'Analyzing task...'})
-    emit_event('progress', {'percent': 5, 'message': 'Planning phase started'})
-    
-    emit_event('step_start', {
-        'step': 1,
-        'title': '🧠 Phase 1: Planning & Analysis',
-        'details': '📖 Analyzing task requirements...'
-    })
-    
-    time.sleep(0.5)
-    emit_event('step_update', {
-        'step': 1,
-        'details': f"📋 Task: {task}"
-    })
-    
-    # Analyze task type - more specific checks first
-    task_type = "general"
-    if "comprehensive" in task_lower or ("full" in task_lower and "system" in task_lower):
-        task_type = "comprehensive"
-    elif "security" in task_lower or "audit" in task_lower or "failed" in task_lower:
-        task_type = "security"
-    elif "network" in task_lower or ("active" in task_lower and "connections" in task_lower):
-        task_type = "network"
-    elif "disk" in task_lower or "space" in task_lower or "storage" in task_lower:
-        task_type = "disk"
-    elif "memory" in task_lower or "ram" in task_lower:
-        task_type = "memory"
-    elif "process" in task_lower and ("count" in task_lower or "list" in task_lower or "show" in task_lower):
-        task_type = "processes"
-    elif "service" in task_lower or "status" in task_lower:
-        task_type = "services"
-    elif any(q in task_lower for q in ['who', 'what', 'where', 'when', 'why', 'how', 'list', 'tell', 'ה谁是', 'מי', 'מה', 'איך', 'למה', 'מתי', 'איפה', 'ספר', 'תן']):
-        task_type = "question"
-    
-    emit_event('step_update', {
-        'step': 1,
-        'details': f'🔍 Task type identified: {task_type}\n📊 Preparing execution plan...'
-    })
-    
-    emit_event('planning', {'status': 'complete'})
-    emit_event('step_complete', {
-        'step': 1,
-        'output': f'✅ Planning complete - executing {task_type} task'
-    })
-    emit_event('progress', {'percent': 25, 'message': 'Planning complete'})
-    
-    time.sleep(0.3)
-    
-    # ========== PHASE 2: Execution ==========
-    emit_event('execution', {'status': 'in_progress', 'details': 'Thinking...'})
-    emit_event('progress', {'percent': 30, 'message': 'Execution phase started'})
-    
-    emit_event('step_start', {
-        'step': 2,
-        'title': '🧠 Phase 2: Answering / Executing',
-        'details': '🔄 Processing your request...'
-    })
-    
-    time.sleep(0.5)
-    
-    # Execute based on task type
-    if task_type == "processes":
-        result = execute_process_task(task)
-    elif task_type == "memory":
-        result = execute_memory_task(task)
-    elif task_type == "disk":
-        result = execute_disk_task(task)
-    elif task_type == "network":
-        result = execute_network_task(task)
-    elif task_type == "security":
-        result = execute_security_task(task)
-    elif task_type == "comprehensive":
-        result = execute_comprehensive_task(task)
-    elif task_type == "question":
-        # NEW: Answer questions using AI
-        emit_event('step_update', {
-            'step': 2,
-            'details': '🤖 Searching knowledge base...'
-        })
-        result = answer_question(task)
-    else:
-        result = answer_question(task)
-    
-    emit_event('step_update', {
-        'step': 2,
-        'details': f'📊 Data collected successfully'
-    })
-    
-    emit_event('execution', {'status': 'complete'})
-    emit_event('step_complete', {
-        'step': 2,
-        'output': f'✅ Data collection complete'
-    })
-    
-    time.sleep(0.3)
-    
-    # ========== PHASE 3: Processing ==========
-    emit_event('processing', {'status': 'in_progress', 'details': 'Generating report...'})
-    emit_event('progress', {'percent': 70, 'message': 'Processing results...'})
-    
-    emit_event('step_start', {
-        'step': 3,
-        'title': '📊 Phase 3: Data Processing & Report Generation',
-        'details': '🔄 Compiling report data...'
-    })
-    
-    time.sleep(0.5)
-    
-    # Report already generated by execute_*_task functions
-    report_content = result
-    
-    emit_event('step_update', {
-        'step': 3,
-        'details': f'✅ Report generated ({len(report_content)} characters)'
-    })
-    
-    time.sleep(0.3)
-    
-    # Verify file
-    output_file = os.path.join(os.path.dirname(__file__), 'empire_report.txt')
-    emit_event('step_update', {
-        'step': 3,
-        'details': f'💾 Report saved to: empire_report.txt'
-    })
-    emit_event('processing', {'status': 'complete'})
-    emit_event('step_complete', {
-        'step': 3,
-        'output': '✅ Report generated successfully'
-    })
-    emit_event('progress', {'percent': 90, 'message': 'Report generated'})
-    
-    time.sleep(0.3)
-    
-    # ========== PHASE 4: Output ==========
-    emit_event('output', {'status': 'in_progress', 'details': 'Finalizing...'})
-    
-    emit_event('step_start', {
-        'step': 4,
-        'title': '📤 Phase 4: Output & Verification',
-        'details': '🔄 Finalizing output...'
-    })
-    
-    time.sleep(0.5)
-    
-    # Verify file exists
-    if os.path.exists(output_file):
-        with open(output_file, 'r', encoding='utf-8') as f:
-            verified_content = f.read()
-        emit_event('step_update', {
-            'step': 4,
-            'details': f'✅ Verification complete - file exists and contains {len(verified_content)} characters'
-        })
-    else:
-        emit_event('step_update', {
-            'step': 4,
-            'details': '⚠️ Warning: File not found on disk'
-        })
-    
-    emit_event('output', {'status': 'complete'})
-    emit_event('step_complete', {
-        'step': 4,
-        'output': '✅ Task completed successfully!'
-    })
-    
-    # Send final output to UI
-    emit_event('final_output', {
-        'output': report_content,
-        'file': 'empire_report.txt'
-    })
-    
-    emit_event('progress', {'percent': 100, 'message': 'Task complete!'})
-    
-    log(f"✅ Task completed - Report saved to empire_report.txt")
-
-
-def list_active_services():
-    """List all active autonomous services"""
-    services = []
-    
-    # Service 1: Planning Engine
-    services.append({
-        'name': 'Planning Engine (LLM)',
-        'status': 'ACTIVE',
-        'details': 'GPT-4 based task decomposition',
-        'uptime': '24/7',
-        'last_check': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    })
-    
-    # Service 2: Execution Core
-    services.append({
-        'name': 'Execution Core',
-        'status': 'ACTIVE',
-        'details': 'Task execution and command processing',
-        'uptime': '24/7',
-        'last_check': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    })
-    
-    # Service 3: SSE Event Stream
-    services.append({
-        'name': 'SSE Event Stream',
-        'status': 'ACTIVE',
-        'details': 'Real-time status updates to UI',
-        'uptime': '24/7',
-        'last_check': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    })
-    
-    # Service 4: File System Manager
-    services.append({
-        'name': 'File System Manager',
-        'status': 'ACTIVE',
-        'details': 'Read/write operations and report generation',
-        'uptime': '24/7',
-        'last_check': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    })
-    
-    # Service 5: Git Integration
-    services.append({
-        'name': 'Git Integration',
-        'status': 'ACTIVE',
-        'details': 'Repository operations and version control',
-        'uptime': '24/7',
-        'last_check': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    })
-    
-    # Service 6: API Gateway
-    services.append({
-        'name': 'API Gateway',
-        'status': 'ACTIVE',
-        'details': 'REST endpoints for task submission',
-        'uptime': '24/7',
-        'last_check': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    })
-    
-    # Service 7: Security Monitor
-    services.append({
-        'name': 'Security Monitor',
-        'status': 'ACTIVE',
-        'details': 'Authentication and authorization checks',
-        'uptime': '24/7',
-        'last_check': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    })
-    
-    # Service 8: CORS Handler
-    services.append({
-        'name': 'CORS Handler',
-        'status': 'ACTIVE',
-        'details': 'Cross-origin resource sharing management',
-        'uptime': '24/7',
-        'last_check': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    })
-    
-    return services
-
-
-def generate_empire_report(services):
-    """Generate the empire report content"""
-    timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    
-    report = f"""
-╔══════════════════════════════════════════════════════════════════════════════╗
-║                        GAMMA AGENT v2.0                                        ║
-║                    AUTONOMOUS SERVICES REPORT                                  ║
-╠══════════════════════════════════════════════════════════════════════════════╣
-║  Generated: {timestamp:<60}║
-║  Report ID: EMP-2026-{datetime.now().strftime('%m%d%H%M')}-001                    ║
-╠══════════════════════════════════════════════════════════════════════════════╣
-║                                                                              ║
-║  EXECUTIVE SUMMARY                                                            ║
-║  ─────────────────                                                            ║
-║  Total Active Services: {len(services):<48}║
-║  System Status: OPERATIONAL                                                   ║
-║  Last Updated: {timestamp:<57}║
-║                                                                              ║
-╠══════════════════════════════════════════════════════════════════════════════╣
-║                                                                              ║
-║  ACTIVE AUTONOMOUS SERVICES                                                   ║
-║  ═══════════════════════════                                                  ║
-"""
-    
-    for i, service in enumerate(services, 1):
-        report += f"""
-║  ┌────────────────────────────────────────────────────────────────────────┐  ║
-║  │ Service #{i}: {service['name']:<55} │  ║
-║  ├────────────────────────────────────────────────────────────────────────┤  ║
-║  │ Status:    {service['status']:<60}│  ║
-║  │ Details:   {service['details']:<60}│  ║
-║  │ Uptime:    {service['uptime']:<60}│  ║
-║  │ Last Check:{service['last_check']:<60}│  ║
-║  └────────────────────────────────────────────────────────────────────────┘  ║
-"""
-    
-    report += f"""
-╠══════════════════════════════════════════════════════════════════════════════╣
-║                                                                              ║
-║  SERVICE STATUS BREAKDOWN                                                     ║
-║  ─────────────────────────                                                     ║
-║  ✅ ACTIVE:     {sum(1 for s in services if s['status'] == 'ACTIVE'):<10} services                                              ║
-║  ⏸️ PAUSED:     0 services                                                    ║
-║  ❌ ERROR:      0 services                                                    ║
-║                                                                              ║
-╠══════════════════════════════════════════════════════════════════════════════╣
-║                                                                              ║
-║  SYSTEM CAPABILITIES                                                          ║
-║  ───────────────────                                                          ║
-║  ✓ Real-time Task Execution                                                   ║
-║  ✓ SSE Event Streaming                                                        ║
-║  ✓ File System Operations                                                      ║
-║  ✓ Git Repository Integration                                                  ║
-║  ✓ API Gateway (REST)                                                          ║
-║  ✓ Security & Authentication                                                    ║
-║  ✓ CORS Management                                                             ║
-║  ✓ Multi-threaded Processing                                                   ║
-║                                                                              ║
-╠══════════════════════════════════════════════════════════════════════════════╣
-║                                                                              ║
-║  RECOMMENDATIONS                                                              ║
-║  ───────────────                                                              ║
-║  • All systems operational - no action required                               ║
-║  • Continue monitoring service health                                          ║
-║  • Maintain regular security audits                                           ║
-║                                                                              ║
-╚══════════════════════════════════════════════════════════════════════════════╝
-
-Report generated by Gamma Agent v2.0
-Timestamp: {timestamp}
-"""
-    
-    return report
-
+# ============================================================================
+# LEGACY COMPATIBILITY
+# ============================================================================
+
+def answer_question(question: str) -> str:
+    """Legacy function for backwards compatibility"""
+    return execute_with_gemini(question)
+
+def execute_process_task(task: str) -> str:
+    """Legacy function for backwards compatibility"""
+    return tool_execute_shell(task)
+
+# ============================================================================
+# FLASK ROUTES
+# ============================================================================
 
 @app.route('/')
 def index():
     """Serve the gamma-standalone.html"""
-    static_dir = os.path.dirname(os.path.abspath(__file__))
-    return send_file(os.path.join(static_dir, 'gamma-standalone.html'))
-
+    return send_file(os.path.join(REPO_DIR, 'gamma-standalone.html'))
 
 @app.route('/execute', methods=['POST'])
 def execute():
@@ -902,29 +918,37 @@ def execute():
     
     log(f"📥 New task received: {task}")
     
-    # Run task in background thread
     thread = threading.Thread(target=execute_task_streaming, args=(task,))
     thread.daemon = True
     thread.start()
     
     return jsonify({'status': 'started', 'task': task})
 
+def execute_task_streaming(task: str):
+    """Execute task with streaming updates"""
+    task_id = hashlib.md5(f"{task}{time.time()}".encode()).hexdigest()[:8]
+    
+    emit_event('task_started', {'task_id': task_id, 'task': task})
+    
+    try:
+        result = execute_with_gemini(task)
+        emit_event('task_completed', {'task_id': task_id, 'result': result[:500]})
+        save_task_output(task_id, result)
+    except Exception as e:
+        emit_event('task_error', {'task_id': task_id, 'error': str(e)})
 
 @app.route('/events')
 def events():
     """SSE endpoint for real-time updates"""
     def generate():
-        # Send initial connection event
         yield f"data: {json.dumps({'type': 'connected', 'timestamp': datetime.now().isoformat()})}\n\n"
         
-        # Read existing events from file
         if os.path.exists(EVENTS_FILE):
             with open(EVENTS_FILE, 'r') as f:
                 for line in f:
                     if line.strip():
                         yield f"data: {line.strip()}\n\n"
         
-        # Stream new events from file
         last_pos = os.path.getsize(EVENTS_FILE) if os.path.exists(EVENTS_FILE) else 0
         while True:
             try:
@@ -941,34 +965,129 @@ def events():
     
     return Response(generate(), mimetype='text/event-stream')
 
-
 @app.route('/status')
 def status():
     """Get current status"""
     return jsonify({
         'status': 'running',
-        'services_count': len(list_active_services()),
+        'tools_count': len(registry.get_schemas()),
+        'watcher_active': command_watcher.running,
         'timestamp': datetime.now().isoformat()
     })
 
+@app.route('/tools')
+def list_tools():
+    """List all available tools"""
+    return jsonify({
+        'tools': registry.get_schemas(),
+        'count': len(registry.get_schemas())
+    })
+
+@app.route('/execute_tool', methods=['POST'])
+def execute_tool():
+    """Execute a specific tool directly"""
+    data = request.get_json()
+    tool_name = data.get('tool', '')
+    arguments = data.get('arguments', {})
+    
+    if not tool_name:
+        return jsonify({'error': 'No tool specified'}), 400
+    
+    result = registry.execute(tool_name, arguments)
+    return jsonify({'result': result})
+
+@app.route('/log')
+def get_log():
+    """Get the agent log"""
+    if os.path.exists(LOG_FILE):
+        return send_file(LOG_FILE)
+    return jsonify({'error': 'Log file not found'}), 404
 
 @app.route('/report')
 def get_report():
     """Download the empire_report.txt file"""
-    report_path = os.path.join(os.path.dirname(__file__), 'empire_report.txt')
+    report_path = os.path.join(REPO_DIR, 'empire_report.txt')
     if os.path.exists(report_path):
         return send_file(report_path, as_attachment=True)
     return jsonify({'error': 'Report not found'}), 404
 
+@app.route('/watcher/start', methods=['POST'])
+def start_watcher():
+    """Start the autonomous command watcher"""
+    command_watcher.start_background()
+    return jsonify({'status': 'started'})
+
+@app.route('/watcher/stop', methods=['POST'])
+def stop_watcher():
+    """Stop the autonomous command watcher"""
+    command_watcher.stop_watching()
+    return jsonify({'status': 'stopped'})
+
+@app.route('/watcher/status')
+def watcher_status():
+    """Get watcher status"""
+    return jsonify({
+        'active': command_watcher.running,
+        'processed_files': list(command_watcher.processed_files)
+    })
+
+@app.route('/process_command_file', methods=['POST'])
+def process_command_file():
+    """Manually process a command file"""
+    data = request.get_json()
+    filename = data.get('filename', '')
+    
+    if not filename:
+        return jsonify({'error': 'No filename provided'}), 400
+    
+    filepath = os.path.join(COMMANDS_DIR, filename)
+    if not os.path.exists(filepath):
+        return jsonify({'error': 'File not found'}), 404
+    
+    result = command_watcher.execute_command_file(filename, filepath)
+    return jsonify({'result': result})
+
+@app.route('/commands')
+def list_commands():
+    """List pending command files"""
+    files = []
+    for filename in os.listdir(COMMANDS_DIR):
+        if filename.endswith('.txt'):
+            filepath = os.path.join(COMMANDS_DIR, filename)
+            files.append({
+                'name': filename,
+                'size': os.path.getsize(filepath),
+                'modified': datetime.fromtimestamp(os.path.getmtime(filepath)).isoformat(),
+                'processed': filename in command_watcher.processed_files
+            })
+    return jsonify({'files': files})
+
+# ============================================================================
+# MAIN ENTRY POINT
+# ============================================================================
 
 if __name__ == '__main__':
-    print("""
+    log_to_file("=" * 60, "SYSTEM")
+    log_to_file("Gamma Agent v4.0 Starting", "SYSTEM")
+    log_to_file(f"Repository: {REPO_DIR}", "SYSTEM")
+    log_to_file(f"Commands Dir: {COMMANDS_DIR}", "SYSTEM")
+    log_to_file(f"Archive Dir: {ARCHIVE_DIR}", "SYSTEM")
+    log_to_file(f"Tools Registered: {len(registry.get_schemas())}", "SYSTEM")
+    log_to_file(f"GitHub Token: {'Configured' if GITHUB_TOKEN else 'Not configured'}", "SYSTEM")
+    log_to_file(f"Gemini API Key: {'Configured' if GEMINI_API_KEY else 'Not configured'}", "SYSTEM")
+    log_to_file("=" * 60, "SYSTEM")
+    
+    print(f"""
 ╔══════════════════════════════════════════════════════════════════════╗
-║                        GAMMA AGENT v3.0                              ║
-║              Autonomous AI Agent - Cloud Ready                       ║
+║                        GAMMA AGENT v4.0                              ║
+║              Autonomous Execution Agent - Tool Registry              ║
 ╠══════════════════════════════════════════════════════════════════════╣
 ║  🚀 Server starting...                                              ║
+║  📁 Repository: {REPO_DIR:<48}║
+║  🛠️  Tools: {len(registry.get_schemas()):<50}║
+║  👁️  Command Watcher: AUTONOMOUS                                     ║
 ╚══════════════════════════════════════════════════════════════════════╝
     """)
     
+    command_watcher.start_background()
     app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)), debug=False)
