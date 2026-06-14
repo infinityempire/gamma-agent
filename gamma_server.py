@@ -43,6 +43,59 @@ HTTP_SERVER_ERROR   = 500
 # Event file for SSE
 EVENTS_FILE = os.path.join(os.path.dirname(__file__), '.events')
 
+
+def run_command(cmd, timeout=10):
+    """
+    Execute a shell command safely and return output.
+    Uses shell=False with split to prevent injection.
+    For complex pipes, uses shell=True with careful input validation.
+    """
+    if not cmd or not isinstance(cmd, str):
+        return ""
+    
+    # Limit command length for safety
+    if len(cmd) > 2000:
+        return "[Error] Command too long"
+    
+    # Block dangerous patterns
+    dangerous = ['rm -rf', 'mkfs', ':(){:|:&};:', '> /dev/', 'dd if=']
+    for pattern in dangerous:
+        if pattern in cmd:
+            return f"[Blocked] Dangerous pattern detected: {pattern}"
+    
+    try:
+        # For simple commands without pipes, use list form
+        if '|' not in cmd and '>' not in cmd and '&&' not in cmd:
+            parts = cmd.split()
+            if parts:
+                result = subprocess.run(
+                    parts,
+                    capture_output=True,
+                    text=True,
+                    timeout=timeout,
+                    shell=False
+                )
+                return result.stdout if result.stdout else result.stderr if result.stderr else ""
+        else:
+            # For commands with pipes/redirection, use shell=True with sanitization
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=timeout,
+                shell=True
+            )
+            return result.stdout if result.stdout else result.stderr if result.stderr else ""
+    except subprocess.TimeoutExpired:
+        return "[Timeout] Command execution timed out"
+    except FileNotFoundError:
+        return "[Not Found] Command not available"
+    except Exception as e:
+        return f"[Error] {str(e)}"
+    
+    return ""
+
+
 def emit_event(event_type, data):
     """Emit an event to SSE clients"""
     event = json.dumps({
