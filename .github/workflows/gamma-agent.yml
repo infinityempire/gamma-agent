@@ -58,13 +58,17 @@ jobs:
           fi
 
       - name: Run Gamma Agent
+        env:
+          INPUT_TASK: ${{ github.event.inputs.task || 'echo Hello' }}
+          INPUT_MAX_RETRIES: ${{ github.event.inputs.max_retries || '3' }}
+          INPUT_MAX_ITERATIONS: ${{ github.event.inputs.max_iterations || '10' }}
         run: |
           echo "=========================================="
           echo "🤖 GAMMA AGENT v3.0 - CLOUD EXECUTION"
           echo "=========================================="
-          echo "📋 Task: ${{ github.event.inputs.task }}"
-          echo "🔄 Max Retries: ${{ github.event.inputs.max_retries }}"
-          echo "🔁 Max Iterations: ${{ github.event.inputs.max_iterations }}"
+          echo "📋 Task: $INPUT_TASK"
+          echo "🔄 Max Retries: $INPUT_MAX_RETRIES"
+          echo "🔁 Max Iterations: $INPUT_MAX_ITERATIONS"
           echo "⏰ Started: $(date)"
           echo ""
           python3 run_agent.py
